@@ -21,7 +21,7 @@
   .card h2{margin:0 0 12px 0;font-size:15px;letter-spacing:.4px;color:#cdd3ff;text-transform:uppercase}
   label{display:block;font-size:12px;color:var(--muted);margin:10px 0 4px}
   input,select,textarea,button{font:inherit;color:var(--ink);background:#0e1430;border:1px solid var(--border);border-radius:8px;padding:8px 10px;width:100%}
-  textarea{min-height:120px;resize:vertical;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px}
+  textarea{min-height:140px;resize:vertical;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px}
   button{cursor:pointer;background:linear-gradient(180deg,var(--accent),#5a3fdc);border-color:#5a3fdc;font-weight:600}
   button.ghost{background:#0e1430;border:1px solid var(--border)}
   button.warn{background:linear-gradient(180deg,#f59e0b,#b3700a);border-color:#b3700a;color:#1a1100}
@@ -46,6 +46,8 @@
   details{margin-top:8px}
   summary{cursor:pointer;color:#a7b0e0}
   .hint{background:rgba(124,92,255,.08);border:1px dashed #5a3fdc;border-radius:10px;padding:10px;font-size:12px;color:#cdd3ff;margin-bottom:10px}
+  .alert{background:rgba(34,197,94,.1);border:1px solid #1f6f3f;border-radius:10px;padding:10px;font-size:12px;color:#bbf7d0;margin-top:8px}
+  .alert.bad{background:rgba(239,68,68,.1);border-color:#7a1f1f;color:#fecaca}
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:6px}
   .factor-bar{height:6px;background:#0a1029;border-radius:4px;overflow:hidden;margin-top:3px}
   .factor-bar > span{display:block;height:100%;background:linear-gradient(90deg,var(--accent2),var(--accent))}
@@ -58,14 +60,36 @@
     <h1>Race Edge <span class="pill">Exacta &amp; First 4 Engine</span></h1>
     <div class="tag">Plackett-Luce Monte Carlo - Thoroughbred / Greyhound / Harness</div>
   </div>
-  <div class="small">v1.0</div>
+  <div class="small">v2.0</div>
 </header>
 
 <main>
   <!-- LEFT: Race setup -->
   <section>
     <div class="card">
-      <h2>1. Race Setup</h2>
+      <h2>1. Smart Paste (SportsBet)</h2>
+      <div class="hint">
+        Paste the entire SportsBet form-guide page text. The parser will:
+        detect the code (horse/greyhound/harness), split multiple races, extract every runner's
+        SB rating, last-6 form, win/place %, best time, days since, weight, barrier, jockey/driver/trainer,
+        track/distance/going record, fixed odds, and "Top Tip" markers.
+      </div>
+      <textarea id="paste" placeholder="Paste anything from the SportsBet 'Form Guide' page here. Multi-race pastes are supported."></textarea>
+      <div class="row" style="margin-top:8px">
+        <button onclick="smartParse()">Parse paste</button>
+        <button class="ghost" onclick="document.getElementById('paste').value=''">Clear</button>
+      </div>
+      <div id="parseStatus"></div>
+
+      <label style="margin-top:12px">Race detected</label>
+      <select id="raceSelect" onchange="loadRace()" disabled><option>(paste &amp; parse first)</option></select>
+      <label style="margin-top:8px;display:flex;align-items:center;gap:6px;font-size:12px;color:var(--ink)">
+        <input type="checkbox" id="autoRun" checked style="width:auto"/> Auto-run prediction after loading race
+      </label>
+    </div>
+
+    <div class="card" style="margin-top:16px">
+      <h2>2. Race Setup</h2>
       <label>Code</label>
       <select id="code">
         <option value="thoroughbred">Thoroughbred (Horse)</option>
@@ -81,31 +105,14 @@
         <div><label>Going / Track</label>
           <select id="going">
             <option>Good</option><option>Soft</option><option>Heavy</option>
-            <option>Fast</option><option>Slow</option><option>Synthetic</option>
+            <option>Firm</option><option>Fast</option><option>Slow</option><option>Synthetic</option>
           </select>
         </div>
       </div>
       <label>Field size</label>
       <div class="row">
         <input id="fieldSize" type="number" min="2" max="24" value="10"/>
-        <button class="ghost" onclick="rebuildField()">Build field</button>
-      </div>
-    </div>
-
-    <div class="card" style="margin-top:16px">
-      <h2>2. Smart Paste (SportsBet)</h2>
-      <div class="hint">
-        Paste runner data copied from a SportsBet form guide. The parser auto-detects:
-        runner #, name, barrier/box, jockey/driver, trainer, weight, last starts (e.g. "3-2-1"),
-        and fixed-win odds. You can also enter rows manually below.
-      </div>
-      <textarea id="paste" placeholder="Example:
-1. Storm King (4) J: J. Mcdonald (58.5kg) T: C. Waller  3-2-1  $3.40
-2. Night Raider (7) J: T. Berry (57.0kg) T: G. Waterhouse  5-1-4  $5.50
-..."></textarea>
-      <div class="row" style="margin-top:8px">
-        <button onclick="smartParse()">Parse paste</button>
-        <button class="ghost" onclick="document.getElementById('paste').value=''">Clear</button>
+        <button class="ghost" onclick="rebuildField()">Rebuild blank field</button>
       </div>
     </div>
 
@@ -132,7 +139,7 @@
         <table id="fieldTable"></table>
       </div>
       <div class="small" style="margin-top:8px">
-        Rate every input 0-100 (higher = better) where applicable. Leave a field blank or 50 if unknown - the model will treat it as average.
+        Each factor 0-100 (higher = better). Tweak any value before running. Scratched runners are excluded.
       </div>
     </div>
 
@@ -166,54 +173,52 @@
 <script>
 /* =========================================================================
    FACTOR DEFINITIONS PER CODE
-   Each factor: key, label, weight (sum to 100). Weights derived from
-   long-standing handicapping research and tuned for Australian racing.
    ========================================================================= */
 const FACTORS = {
   thoroughbred: [
-    {k:'form',     l:'Form (last 3)',      w:20},
-    {k:'speed',    l:'Speed rating',       w:15},
-    {k:'class',    l:'Class/Weight',       w:15},
-    {k:'barrier',  l:'Barrier',            w:10},
+    {k:'form',     l:'Form (last 6)',      w:18},
+    {k:'speed',    l:'Speed/SB Rating',    w:18},
+    {k:'class',    l:'Class/Win %',        w:14},
+    {k:'barrier',  l:'Barrier',            w:9},
     {k:'distance', l:'Distance suit',      w:10},
-    {k:'jockey',   l:'Jockey strike %',    w:8},
-    {k:'trainer',  l:'Trainer strike %',   w:7},
-    {k:'track',    l:'Track suit',         w:5},
-    {k:'going',    l:'Going suit',         w:5},
-    {k:'fresh',    l:'Days-since fitness', w:5}
+    {k:'jockey',   l:'Jockey',             w:6},
+    {k:'trainer',  l:'Trainer',            w:5},
+    {k:'track',    l:'Track suit',         w:6},
+    {k:'going',    l:'Going suit',         w:6},
+    {k:'fresh',    l:'Days-since fitness', w:8}
   ],
   greyhound: [
-    {k:'box',      l:'Box draw',           w:20},
-    {k:'early',    l:'Early speed/split',  w:18},
-    {k:'besttime', l:'Best time at trip',  w:15},
-    {k:'form',     l:'Recent form',        w:15},
-    {k:'distance', l:'Distance suit',      w:10},
-    {k:'track',    l:'Track suit',         w:8},
-    {k:'trainer',  l:'Trainer strike %',   w:7},
-    {k:'class',    l:'Class',              w:3},
+    {k:'box',      l:'Box draw',           w:18},
+    {k:'early',    l:'Early speed',        w:18},
+    {k:'besttime', l:'Best time at trip',  w:14},
+    {k:'form',     l:'Recent form',        w:16},
+    {k:'class',    l:'SB Rating/Class',    w:12},
+    {k:'distance', l:'Distance suit',      w:8},
+    {k:'track',    l:'Track suit',         w:6},
+    {k:'trainer',  l:'Trainer',            w:4},
     {k:'fresh',    l:'Days since',         w:4}
   ],
   harness: [
     {k:'barrier',  l:'Barrier/row',        w:18},
     {k:'form',     l:'Recent form',        w:18},
-    {k:'mile',     l:'Mile rate',          w:15},
-    {k:'driver',   l:'Driver strike %',    w:12},
-    {k:'class',    l:'Class',              w:8},
-    {k:'trainer',  l:'Trainer strike %',   w:8},
+    {k:'mile',     l:'Mile rate / Rating', w:15},
+    {k:'driver',   l:'Driver',             w:10},
+    {k:'class',    l:'Class/Win %',        w:10},
+    {k:'trainer',  l:'Trainer',            w:7},
     {k:'distance', l:'Distance suit',      w:8},
-    {k:'startType',l:'Stand/Mobile suit',  w:7},
-    {k:'fresh',    l:'Days since',         w:6}
+    {k:'startType',l:'Stand/Mobile',       w:6},
+    {k:'fresh',    l:'Days since',         w:8}
   ]
 };
 
 /* state */
 let RUNNERS = [];
+let DETECTED_RACES = [];
 
 /* =========================================================================
    UI BUILDERS
    ========================================================================= */
 function rebuildField(){
-  const code = document.getElementById('code').value;
   const n = Math.max(2, Math.min(24, parseInt(document.getElementById('fieldSize').value||'10')));
   RUNNERS = [];
   for(let i=1;i<=n;i++) RUNNERS.push(blankRunner(i));
@@ -230,16 +235,16 @@ function blankRunner(i){
 function renderField(){
   const code = document.getElementById('code').value;
   const factors = FACTORS[code];
-  document.getElementById('codeHint').textContent = '- ' + factors.length + ' factors';
+  document.getElementById('codeHint').textContent = '- ' + factors.length + ' factors - ' + (RUNNERS.filter(r=>!r.scratched).length) + ' active';
   const t = document.getElementById('fieldTable');
   let html = '<thead><tr><th>#</th><th>Name</th><th>Scr</th>';
   factors.forEach(f=> html += `<th title="weight ${f.w}%">${f.l}</th>`);
   html += '<th>SB Odds</th></tr></thead><tbody>';
   RUNNERS.forEach((r,idx)=>{
-    html += `<tr>
+    html += `<tr style="${r.scratched?'opacity:.45':''}">
       <td class="runner-no">${r.no}</td>
       <td><input value="${escapeHtml(r.name)}" oninput="RUNNERS[${idx}].name=this.value"/></td>
-      <td><input type="checkbox" ${r.scratched?'checked':''} onchange="RUNNERS[${idx}].scratched=this.checked"/></td>`;
+      <td><input type="checkbox" ${r.scratched?'checked':''} onchange="RUNNERS[${idx}].scratched=this.checked;renderField()"/></td>`;
     factors.forEach(f=>{
       const v = r.f[f.k] ?? 50;
       html += `<td><input type="number" min="0" max="100" value="${v}" style="width:60px" oninput="RUNNERS[${idx}].f['${f.k}']=parseFloat(this.value)||0"/></td>`;
@@ -254,116 +259,452 @@ function renderField(){
 function escapeHtml(s){return String(s||'').replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
 
 /* =========================================================================
-   SMART PASTE PARSER
-   Extracts: runner number, name, barrier/box, jockey/trainer, weight,
-   last 3 form, and fixed-win odds. Then maps recognised values -> 0-100
-   factor scores using sensible defaults.
+   RACE SPLITTER
+   Detects all races in a paste using "Nm Rn" markers, with code/track/going
+   inferred from the section above each marker.
    ========================================================================= */
-function smartParse(){
-  const code = document.getElementById('code').value;
-  const text = document.getElementById('paste').value.trim();
-  if(!text){ alert('Paste form-guide text first.'); return; }
-
-  const lines = text.split(/\n+/).map(s=>s.trim()).filter(Boolean);
-  const parsed = [];
-  for(const ln of lines){
-    const numM = ln.match(/^(\d+)[\.\)\:]\s+/);
-    if(!numM) continue;
-    const no = parseInt(numM[1]);
-    let rest = ln.slice(numM[0].length);
-
-    // odds (e.g. $3.40 or 3.40)
-    const oddsM = rest.match(/\$?\s?(\d{1,3}(?:\.\d{1,2})?)\s*$/);
-    let odds = null;
-    if(oddsM){ odds = parseFloat(oddsM[1]); rest = rest.slice(0, oddsM.index).trim(); }
-
-    // form string like 3-2-1 or 321 or 3x21
-    const formM = rest.match(/(?:^|\s)((?:\d|x){3,8}|(?:\d-){2,7}\d)(?=\s|$)/i);
-    let formStr = formM ? formM[1] : null;
-    if(formM) rest = rest.replace(formM[0],' ');
-
-    // barrier (n) or box (n)
-    const barM = rest.match(/\((\d{1,2})\)/);
-    let barrier = barM ? parseInt(barM[1]) : null;
-    if(barM) rest = rest.replace(barM[0],' ');
-
-    // weight kg
-    const wtM = rest.match(/(\d{2}(?:\.\d)?)\s*kg/i);
-    let weightKg = wtM ? parseFloat(wtM[1]) : null;
-    if(wtM) rest = rest.replace(wtM[0],' ');
-
-    // jockey / driver
-    const jM = rest.match(/(?:J|Jky|D|Drv|Driver|Jockey)\s*[:\-]?\s*([A-Z][A-Za-z'\.\- ]+?)(?=\s+(?:T|Tr|Trainer)[:\-]|\s{2,}|$)/);
-    let jockey = jM ? jM[1].trim() : null;
-    if(jM) rest = rest.replace(jM[0],' ');
-
-    // trainer
-    const tM = rest.match(/(?:T|Tr|Trainer)\s*[:\-]?\s*([A-Z][A-Za-z'\.\- ]+?)(?=\s{2,}|$)/);
-    let trainer = tM ? tM[1].trim() : null;
-    if(tM) rest = rest.replace(tM[0],' ');
-
-    // remaining = name
-    const name = rest.replace(/[()]/g,'').replace(/\s+/g,' ').trim();
-
-    parsed.push({no, name: name || ('Runner '+no), barrier, jockey, trainer, weightKg, formStr, odds});
+function splitRaces(text){
+  function cleanTrack(s){
+    if(!s) return '';
+    let t = s.replace(/\s*[-–]\s*$/,'').trim();
+    // strip everything before a leading "Each Way terms:..." chunk
+    t = t.replace(/^.*?Each Way terms:.*?[-–]\s*/i,'');
+    // strip leading "No Awards", "Top Tip", "Hide Form" etc
+    t = t.replace(/^(?:No Awards|Top Tip|Top Rated|Hide Form|Show Tote|Flucs|Fast Form)\s*/i,'');
+    // strip trailing stray characters
+    t = t.replace(/^[\s>\-–:]+/,'').replace(/[\s>\-–:]+$/,'');
+    if(/^Home$/i.test(t)) return '';
+    return t;
   }
+  const lines = text.split('\n');
+  const marks = [];
+  for(let i=0;i<lines.length;i++){
+    const m = lines[i].match(/^\s*(\d{3,4})m\s+R(\d+)\b(.*)$/i);
+    if(m) marks.push({i, distance:+m[1], raceNo:+m[2], name:(m[3]||'').trim()});
+  }
+  const races = [];
+  for(let r=0;r<marks.length;r++){
+    const start = marks[r].i;
+    const end = (r+1<marks.length)? marks[r+1].i : lines.length;
+    const lookbackStart = (r===0)? 0 : marks[r-1].i+1;
 
-  if(!parsed.length){ alert('Could not parse any rows. Check the paste format.'); return; }
-
-  // resize field
-  document.getElementById('fieldSize').value = parsed.length;
-  RUNNERS = [];
-  parsed.sort((a,b)=>a.no-b.no);
-  parsed.forEach(p=>{
-    const r = blankRunner(p.no);
-    r.name = p.name;
-    if(p.odds) r.odds = '$'+p.odds.toFixed(2);
-
-    // map form string -> 0-100 (best=1st place)
-    if(p.formStr){
-      const positions = p.formStr.replace(/-/g,'').split('').map(c=> c.toLowerCase()==='x'?9:parseInt(c)).filter(n=>!isNaN(n));
-      if(positions.length){
-        // weighted: most recent first
-        let s=0,wsum=0;
-        positions.forEach((pos,i)=>{
-          const w = positions.length - i;
-          // pos 1 = 100, 2 = 80, 3 = 65, 4 = 50, 5+ = 30, 9 (x/fail) = 15
-          const map = {1:100,2:80,3:65,4:50,5:40,6:30,7:25,8:20,9:15};
-          s += (map[pos]||30)*w; wsum += w;
-        });
-        r.f.form = Math.round(s/wsum);
+    let code = null, track = null;
+    for(let i=start-1;i>=lookbackStart;i--){
+      const ln = lines[i].trim();
+      if(!ln) continue;
+      // Extract track when "Horses - X" / "Greyhound X" / "Harness X" appears (anywhere on line)
+      let mc;
+      if(!code && (mc = ln.match(/(?:^|\W)(GreyHound|Greyhounds?)\b\s*[-–]?\s*(.+)?$/i))){
+        code='greyhound';
+        if(mc[2]) track = cleanTrack(mc[2]);
+        break;
+      }
+      if(!code && (mc = ln.match(/Horses?\s*[-–]\s*(.+?)\s*$/i))){
+        code='thoroughbred'; track = cleanTrack(mc[1]); break;
+      }
+      if(!code && (mc = ln.match(/(?:^|\W)Harness\b(?:\s*[-–]?\s*(.+))?$/i))){
+        code='harness';
+        if(mc[1]) {
+          const cand = cleanTrack(mc[1]);
+          if(cand && !/^Racing$/i.test(cand)) track = cand;
+        }
+        break;
       }
     }
-    // barrier/box scoring (low draw bonus, far outside penalty)
-    if(p.barrier!=null){
-      const b = p.barrier;
-      const score = Math.max(20, 100 - (b-1)*7); // 1=>100, 8=>51, 12=>23
-      if(code==='greyhound'){ r.f.box = score; }
-      else { r.f.barrier = score; }
+    // fallback code detection from runner block content
+    const body = lines.slice(start,end).join('\n');
+    if(!code){
+      if(/^D:\s+/m.test(body)) code='harness';
+      else if(/Best Time\s*\n\s*\d/.test(body) && !/W:\s*\d/.test(body)) code='greyhound';
+      else code='thoroughbred';
     }
-    // odds -> implied prob -> distribute small influence into class & speed if we have nothing better
-    if(p.odds && p.odds>1){
-      const imp = 1/p.odds;
-      const oddsScore = Math.round(Math.min(100, imp*150)); // $2 -> 75, $5 -> 30
-      r.f.class = Math.round((r.f.class + oddsScore)/2);
-      if(code==='thoroughbred') r.f.speed = Math.round((r.f.speed + oddsScore)/2);
-      if(code==='greyhound')   r.f.early = Math.round((r.f.early + oddsScore)/2);
-      if(code==='harness')     r.f.mile  = Math.round((r.f.mile  + oddsScore)/2);
+    // going
+    let going = null;
+    const goingRegex = /^(Firm|Good|Soft|Heavy|Fast|Slow|Synthetic)(\s*\(\d+\))?$/i;
+    for(let i=start-1;i>=lookbackStart;i--){
+      const ln = lines[i].trim();
+      const gm = ln.match(goingRegex);
+      if(gm){ going = gm[1]; break; }
     }
-    // weight (lower is better in handicaps) only if thoroughbred
-    if(p.weightKg && code==='thoroughbred'){
-      const wt = p.weightKg;
-      // 54kg -> ~80, 58kg -> ~55, 62kg -> ~30
-      r.f.class = Math.round((r.f.class + Math.max(20, 130 - wt*1.7))/2);
+    // track fallback for harness/greyhound (use breadcrumbs like "> Woodbine Mohawk Park")
+    if(!track){
+      for(let i=start-1;i>=lookbackStart;i--){
+        const ln = lines[i].trim();
+        const bc = ln.match(/^>\s*(.+?)\s*$/);
+        if(bc){
+          const cand = bc[1].trim();
+          if(cand && !/^(Race\s*\d+|International|Domestic|Harness Racing|Greyhound Racing|Horse Racing)$/i.test(cand)){
+            track = cand; break;
+          }
+        }
+      }
     }
-    RUNNERS.push(r);
-  });
-  renderField();
-  alert('Parsed '+parsed.length+' runners. Review the table and tweak any factor before running.');
+    if(!track){
+      for(let i=start-1;i>=lookbackStart;i--){
+        const ln = lines[i].trim();
+        if(/^(GreyHound|Greyhounds?|Horses?|Harness)\b/i.test(ln)) continue;
+        if(goingRegex.test(ln)) continue;
+        if(/^>\s/.test(ln)) continue;
+        if(/^\d+m\s+R\d+/i.test(ln)) continue;
+        if(/^(Win or Place|Hide Form|Show Tote|Flucs|Fast Form|Each Way|Same Race|Exotics|Quaddies|No Awards|Top Tip|Runner)\b/i.test(ln)) continue;
+        if(ln.length>=4 && ln.length<=60 && /[A-Za-z]{4,}/.test(ln) && !/^\d+\./.test(ln) && !/^\d+\s*$/.test(ln)){
+          track = ln; break;
+        }
+      }
+    }
+    races.push({
+      code, track: track||'Unknown', going: going||'Good',
+      distance: marks[r].distance, raceNo: marks[r].raceNo,
+      name: marks[r].name, body
+    });
+  }
+  return races;
 }
 
 /* =========================================================================
-   SCORING + WIN PROBABILITY
+   RUNNER BLOCK PARSER
+   ========================================================================= */
+function parseRunnerBlocks(body){
+  const lines = body.split('\n');
+  const blocks = [];
+  let cur = null;
+  for(let i=0;i<lines.length;i++){
+    const ln = lines[i];
+    const t = ln.trim();
+    const rm = t.match(/^(\d{1,2})\.\s+(.+?)\s*\((\d{1,2})\)\s*$/);
+    if(rm){
+      if(cur) blocks.push(cur);
+      cur = { no:+rm[1], name:rm[2].trim(), barrier:+rm[3], lines:[] };
+    } else if(cur){
+      cur.lines.push(ln);
+    }
+  }
+  if(cur) blocks.push(cur);
+  return blocks;
+}
+
+function recentOddsFromBlock(blockText){
+  const idx = blockText.indexOf('Recent:');
+  if(idx<0) return [];
+  const after = blockText.slice(idx + 'Recent:'.length);
+  const lines = after.split('\n');
+  const odds = [];
+  let started = false;
+  for(const l of lines){
+    const t = l.trim();
+    if(!t){
+      if(started) break;
+      continue;
+    }
+    const m = t.match(/^(\d{1,3}(?:\.\d{1,2})?)$/);
+    if(m){ odds.push(parseFloat(m[1])); started = true; }
+    else { if(started) break; else continue; }
+  }
+  return odds;
+}
+
+function fallbackWinPlace(blockText){
+  let cutoff = blockText.length;
+  for(const marker of ['Recent:','Bio:','Last 6','Career','Runner Comments','No Awards','Top Tip','Top Rated']){
+    const idx = blockText.indexOf(marker);
+    if(idx>=0 && idx<cutoff) cutoff = idx;
+  }
+  const head = blockText.slice(0, cutoff);
+  const nums = [];
+  for(const ln of head.split('\n')){
+    const t = ln.trim();
+    if(/^EW$/.test(t)) continue;
+    const m = t.match(/^(\d{1,3}(?:\.\d{1,2})?)$/);
+    if(m) nums.push(parseFloat(m[1]));
+  }
+  let win=null, place=null;
+  if(nums.length>=5){ win=nums[3]; place=nums[4]; }
+  else if(nums.length===4){ win=nums[3]; }
+  else if(nums.length===3){ win=nums[1]; place=nums[2]; }
+  else if(nums.length===2){ win=nums[0]; place=nums[1]; }
+  else if(nums.length===1){ win=nums[0]; }
+  return {win, place};
+}
+
+function parseRunnerStats(block, code){
+  const text = block.lines.join('\n');
+  const s = { no:block.no, name:block.name, barrier:block.barrier, scratched:false };
+
+  if(/^\s*Scratched/im.test(text)) s.scratched = true;
+  // form last 6
+  const fm = text.match(/^F:\s*(\S+)/m);
+  if(fm && fm[1] !== '-') s.formStr = fm[1];
+  // people
+  const jm = text.match(/^J:\s*(.+)$/m); if(jm) s.jockey = jm[1].trim();
+  const dm = text.match(/^D:\s*(.+)$/m); if(dm) s.driver = dm[1].trim();
+  const tm = text.match(/^T:\s*(.+)$/m); if(tm) s.trainer = tm[1].trim();
+  // weight
+  const wm = text.match(/^W:\s*(\d{1,2}(?:\.\d)?)kg/m); if(wm) s.weightKg = parseFloat(wm[1]);
+  // career rec
+  const careerM = text.match(/Career\s*\n\s*(\d+)\s*:\s*(\d+)-(\d+)-(\d+)/);
+  if(careerM){ s.careerStarts=+careerM[1]; s.careerWins=+careerM[2]; s.careerSec=+careerM[3]; s.careerThd=+careerM[4]; }
+  // Win % / Place %
+  const wp = text.match(/Win %\s*\n\s*(\d+(?:\.\d+)?)%/); if(wp) s.winPct = parseFloat(wp[1]);
+  const pp = text.match(/Place %\s*\n\s*(\d+(?:\.\d+)?)%/); if(pp) s.placePct = parseFloat(pp[1]);
+  // SB Rating / R&S Rating
+  const sb = text.match(/SB Rating\s*\n\s*(\d+(?:\.\d+)?)/);
+  if(sb) s.sbRating = parseFloat(sb[1]);
+  const rs = text.match(/R&S Rating\s*\n\s*(\d+(?:\.\d+)?)/);
+  if(rs && s.sbRating==null) s.sbRating = parseFloat(rs[1]);
+  // Best time
+  const bt = text.match(/Best Time\s*\n\s*(\d+(?:\.\d+)?)/); if(bt) s.bestTime = parseFloat(bt[1]);
+  // Days since
+  const ds = text.match(/(\d+)\s+days?\s+since\s+last\s+race/i); if(ds) s.daysSince = parseInt(ds[1]);
+  // tags
+  if(/Top Tip/i.test(text)) s.topTip = true;
+  if(/\bTop\s*Rated\b/i.test(text) || /^Top\s*\nRated/m.test(text)) s.topRated = true;
+  if(/Track\s*Talent/i.test(text) || /^Track\s*\nTalent/m.test(text)) s.trackTalent = true;
+  if(/Place\s*Rate/i.test(text) || /^Place\s*\nRate/m.test(text)) s.placeRater = true;
+  if(/In\s*Form/i.test(text) || /^In\s*\nForm/m.test(text)) s.inForm = true;
+  if(/Early\s*Speed[\s\S]{0,40}Early\s*\n?Speed/i.test(text)) s.earlyTag = true;
+  // Track / Distance / Trk-Dist record (lines like "Track 8: 3-1-1")
+  const trkM = text.match(/^Track\s*\n\s*(\d+):\s*(\d+)-(\d+)-(\d+)/m);
+  if(trkM){ s.trackStarts=+trkM[1]; s.trackWins=+trkM[2]; s.trackSec=+trkM[3]; s.trackThd=+trkM[4]; }
+  const distM = text.match(/^Distance\s*\n\s*(\d+):\s*(\d+)-(\d+)-(\d+)/m);
+  if(distM){ s.distStarts=+distM[1]; s.distWins=+distM[2]; s.distSec=+distM[3]; s.distThd=+distM[4]; }
+  const tdM = text.match(/Trk\/Dist\s*\n\s*(\d+):\s*(\d+)-(\d+)-(\d+)/);
+  if(tdM){ s.tdStarts=+tdM[1]; s.tdWins=+tdM[2]; s.tdSec=+tdM[3]; s.tdThd=+tdM[4]; }
+  // Going-specific
+  s.goingRec = {};
+  for(const g of ['Firm','Good','Soft','Heavy','Fast','Slow','Synthetic','Dead']){
+    const re = new RegExp(`^${g}\\s*\\n\\s*(\\d+):\\s*(\\d+)-(\\d+)-(\\d+)`,'m');
+    const gm = text.match(re);
+    if(gm) s.goingRec[g] = { starts:+gm[1], wins:+gm[2], sec:+gm[3], thd:+gm[4] };
+  }
+  // Win odds (Recent: line preferred, else fallback)
+  const recOdds = recentOddsFromBlock(text);
+  if(recOdds.length){
+    s.winFixed = recOdds[recOdds.length-1];
+    s.openOdds = recOdds[0];
+  } else {
+    const fb = fallbackWinPlace(text);
+    if(fb.win) s.winFixed = fb.win;
+    if(fb.place) s.placeFixed = fb.place;
+  }
+  // Recent finish positions
+  const finList = text.match(/(\d+)(?:st|nd|rd|th)(?:\/\d+)?/g) || [];
+  if(finList.length){
+    s.recentPositions = finList.slice(0,6).map(x=>parseInt(x.match(/(\d+)/)[1]));
+  }
+  // Greyhound Early Speed value
+  const esM = text.match(/Early Speed:\s*(?:\n\s*)?(\d+(?:\.\d+)?|N\/A)/i);
+  if(esM && esM[1] !== 'N/A') s.earlySpeedOdds = parseFloat(esM[1]);
+  // Settling position (horses)
+  const setM = text.match(/Expected Settling Position\s*\n\s*([A-Za-z][A-Za-z ]+)/);
+  if(setM) s.settling = setM[1].trim();
+  return s;
+}
+
+/* =========================================================================
+   STATS -> FACTORS (0-100)
+   ========================================================================= */
+function statsToFactors(s, code, all, race){
+  const f = {form:50,speed:50,class:50,barrier:50,distance:50,jockey:50,trainer:50,track:50,going:50,fresh:50,
+             box:50,early:50,besttime:50,mile:50,driver:50,startType:50};
+
+  // FORM from F: string
+  if(s.formStr){
+    const positions = s.formStr.replace(/-/g,'').split('').map(c=>{
+      const n = parseInt(c); return isNaN(n)? 9 : n;
+    });
+    if(positions.length){
+      let sm=0,wsum=0;
+      const map={1:100,2:80,3:65,4:50,5:40,6:30,7:25,8:20,9:15,0:15};
+      positions.forEach((p,i)=>{
+        const w = positions.length - i;
+        sm += (map[p]||30)*w; wsum += w;
+      });
+      f.form = Math.round(sm/wsum);
+    }
+  } else if(s.recentPositions && s.recentPositions.length){
+    const map={1:100,2:80,3:65,4:50,5:40,6:30,7:25,8:20};
+    let sm=0,wsum=0;
+    s.recentPositions.forEach((p,i)=>{
+      const w = s.recentPositions.length - i;
+      sm += (map[p]||15)*w; wsum += w;
+    });
+    f.form = Math.round(sm/wsum);
+  }
+
+  // SB / R&S Rating
+  if(s.sbRating!=null){
+    f.class = s.sbRating;
+    if(code==='thoroughbred') f.speed = s.sbRating;
+    if(code==='greyhound') f.early = Math.round((f.early + s.sbRating)/2);
+    if(code==='harness') f.mile = s.sbRating;
+  }
+  // Win %
+  if(s.winPct!=null && s.winPct>=0){
+    const wpScore = Math.min(100, s.winPct*3);
+    f.class = Math.round((f.class + wpScore)/2);
+  }
+  // Best time relative to active field
+  if(s.bestTime!=null){
+    const times = all.filter(x=>!x.scratched && x.bestTime!=null).map(x=>x.bestTime);
+    if(times.length>=2){
+      const min=Math.min(...times), max=Math.max(...times);
+      const norm = (max - s.bestTime) / Math.max(0.001, max-min);
+      const score = Math.round(40 + norm*60);
+      f.besttime = score;
+      if(code==='thoroughbred') f.speed = Math.round((f.speed + score)/2);
+    }
+  }
+  // Barrier / box
+  if(s.barrier!=null){
+    const b = s.barrier;
+    const score = Math.max(20, 100 - (b-1)*7);
+    if(code==='greyhound') f.box = score; else f.barrier = score;
+  }
+  // Days-since freshness
+  if(s.daysSince!=null){
+    const d = s.daysSince;
+    let score;
+    if(d<=7) score=88;
+    else if(d<=14) score=95;
+    else if(d<=21) score=82;
+    else if(d<=35) score=65;
+    else if(d<=60) score=50;
+    else if(d<=120) score=35;
+    else score=25;
+    f.fresh = score;
+  }
+  // Weight (thoroughbred handicap)
+  if(s.weightKg && code==='thoroughbred'){
+    const wScore = Math.max(20, Math.min(100, 130 - s.weightKg*1.7));
+    f.class = Math.round((f.class + wScore)/2);
+  }
+  // Track suit
+  if(s.trackStarts>0){
+    const tp = (s.trackWins + s.trackSec + s.trackThd) / s.trackStarts;
+    f.track = Math.round(35 + tp*65);
+  }
+  if(s.tdStarts>0){
+    const tdp = (s.tdWins + s.tdSec + s.tdThd) / s.tdStarts;
+    f.track = Math.round((f.track + (35 + tdp*65))/2);
+  }
+  // Distance suit
+  if(s.distStarts>0){
+    const dp = (s.distWins + s.distSec + s.distThd) / s.distStarts;
+    f.distance = Math.round(35 + dp*65);
+  }
+  // Going suit
+  if(race && race.going && s.goingRec && s.goingRec[race.going] && s.goingRec[race.going].starts>0){
+    const gr = s.goingRec[race.going];
+    const gp = (gr.wins + gr.sec + gr.thd) / gr.starts;
+    f.going = Math.round(35 + gp*65);
+  }
+  // Tags / boosts
+  if(s.topTip || s.topRated){
+    f.class = Math.min(100, f.class + 10);
+    f.form  = Math.min(100, f.form  + 5);
+    if(code==='thoroughbred') f.speed = Math.min(100, f.speed + 5);
+  }
+  if(s.trackTalent) f.track = Math.min(100, f.track + 12);
+  if(s.placeRater) f.form = Math.min(100, f.form + 4);
+  if(s.inForm) f.form = Math.min(100, f.form + 4);
+
+  // Fixed-odds implied prob (market wisdom)
+  if(s.winFixed && s.winFixed > 1){
+    const imp = 1/s.winFixed;
+    const oddsScore = Math.round(Math.min(100, imp*150));
+    f.class = Math.round((f.class*0.6 + oddsScore*0.4));
+    if(code==='thoroughbred') f.speed = Math.round((f.speed*0.7 + oddsScore*0.3));
+    if(code==='greyhound')   f.early = Math.round((f.early*0.7 + oddsScore*0.3));
+    if(code==='harness')     f.mile  = Math.round((f.mile*0.7 + oddsScore*0.3));
+  }
+
+  // Greyhound early-speed odds (lower = faster)
+  if(code==='greyhound' && s.earlySpeedOdds && s.earlySpeedOdds>0){
+    const e = Math.round(Math.min(100, (1/s.earlySpeedOdds)*150));
+    f.early = Math.round((f.early + e)/2);
+  }
+  // Settling position pace bias for thoroughbred
+  if(code==='thoroughbred' && s.settling){
+    if(/Leader/i.test(s.settling)) f.speed = Math.min(100, f.speed+4);
+  }
+  return f;
+}
+
+/* =========================================================================
+   PARSE ENTRY POINT
+   ========================================================================= */
+function smartParse(){
+  const text = document.getElementById('paste').value;
+  const status = document.getElementById('parseStatus');
+  if(!text || text.trim().length<10){
+    status.innerHTML = '<div class="alert bad">Paste form-guide text first.</div>'; return;
+  }
+  const races = splitRaces(text);
+  if(!races.length){
+    // single-race fallback: treat the whole paste as one race body
+    const body = text;
+    const code = /^D:\s+/m.test(body) ? 'harness' : (/Greyhound/i.test(body) ? 'greyhound' : 'thoroughbred');
+    races.push({code, track:'Unknown', going:'Good', distance:0, raceNo:1, name:'(single race)', body});
+  }
+  // parse each race's runners
+  races.forEach(r=>{
+    const blocks = parseRunnerBlocks(r.body);
+    const stats = blocks.map(b=>parseRunnerStats(b, r.code));
+    r.runners = stats;
+  });
+  DETECTED_RACES = races;
+
+  // populate dropdown
+  const sel = document.getElementById('raceSelect');
+  sel.innerHTML = '';
+  races.forEach((r,i)=>{
+    const active = r.runners.filter(x=>!x.scratched).length;
+    const opt = document.createElement('option');
+    opt.value = i;
+    opt.textContent = `[${r.code}] ${r.track} R${r.raceNo} - ${r.distance}m (${active} runners)`;
+    sel.appendChild(opt);
+  });
+  sel.disabled = false;
+  status.innerHTML = `<div class="alert">Parsed <b>${races.length}</b> race(s) - first race is loaded automatically.</div>`;
+  loadRace();
+}
+
+function loadRace(){
+  const sel = document.getElementById('raceSelect');
+  const i = parseInt(sel.value);
+  if(isNaN(i) || !DETECTED_RACES[i]) return;
+  const r = DETECTED_RACES[i];
+  // sync code/track/going UI
+  document.getElementById('code').value = r.code;
+  document.getElementById('track').value = r.track;
+  document.getElementById('raceNo').value = r.raceNo;
+  document.getElementById('distance').value = r.distance;
+  const goingSel = document.getElementById('going');
+  for(let j=0;j<goingSel.options.length;j++){
+    if(goingSel.options[j].value.toLowerCase()===r.going.toLowerCase()){ goingSel.selectedIndex=j; break; }
+  }
+  // build RUNNERS from stats
+  const stats = r.runners.slice().sort((a,b)=>a.no-b.no);
+  document.getElementById('fieldSize').value = stats.length;
+  RUNNERS = stats.map(st=>{
+    const base = blankRunner(st.no);
+    base.name = st.name;
+    base.scratched = !!st.scratched;
+    base.odds = st.winFixed ? '$'+st.winFixed.toFixed(2) : '';
+    base._stats = st;
+    return base;
+  });
+  // factor mapping (needs all runners for relative comparisons)
+  RUNNERS.forEach(r0=>{
+    if(r0.scratched) return;
+    r0.f = statsToFactors(r0._stats, r.code, RUNNERS.map(x=>x._stats||{}), r);
+  });
+  renderField();
+  if(document.getElementById('autoRun').checked) runEngine();
+}
+
+/* =========================================================================
+   SCORING
    ========================================================================= */
 function computeStrengths(){
   const code = document.getElementById('code').value;
@@ -377,15 +718,14 @@ function computeStrengths(){
       const v = Math.max(0, Math.min(100, +r.f[f.k] || 0));
       s += v * f.w;
     }
-    s = s / wsum; // 0..100
+    s = s / wsum;
     out.push({...r, score:s});
   }
   return out;
 }
 
 function softmax(scored, T){
-  // scale scores so spread is meaningful; T = temperature, lower = more confident
-  const arr = scored.map(s=>s.score/10/T); // /10 -> typical spread
+  const arr = scored.map(s=>s.score/10/T);
   const mx = Math.max(...arr);
   const exps = arr.map(v=>Math.exp(v-mx));
   const sum = exps.reduce((a,b)=>a+b,0);
@@ -394,10 +734,8 @@ function softmax(scored, T){
 
 /* =========================================================================
    PLACKETT-LUCE MONTE CARLO
-   For each sim: sample full ordering by sequentially picking with prob ∝ strength
    ========================================================================= */
 function plSampleOrder(strengths){
-  // strengths: positive numbers
   const idx = strengths.map((_,i)=>i);
   const s = strengths.slice();
   const order = [];
@@ -420,21 +758,14 @@ function plSampleOrder(strengths){
 function runMonteCarlo(strengths, sims){
   const n = strengths.length;
   const winC = new Array(n).fill(0);
-  const placeC = Array.from({length:n},()=>new Array(n).fill(0)); // placeC[i][pos]
-  const exa = new Map();   // "i-j" -> count
-  const f4  = new Map();   // "i-j-k-l" -> count
+  const placeC = Array.from({length:n},()=>new Array(n).fill(0));
+  const exa = new Map(), f4 = new Map();
   for(let s=0;s<sims;s++){
     const ord = plSampleOrder(strengths);
     winC[ord[0]]++;
     for(let p=0;p<Math.min(4,n);p++) placeC[ord[p]][p]++;
-    if(n>=2){
-      const k = ord[0]+'-'+ord[1];
-      exa.set(k,(exa.get(k)||0)+1);
-    }
-    if(n>=4){
-      const k = ord[0]+'-'+ord[1]+'-'+ord[2]+'-'+ord[3];
-      f4.set(k,(f4.get(k)||0)+1);
-    }
+    if(n>=2){ const k = ord[0]+'-'+ord[1]; exa.set(k,(exa.get(k)||0)+1); }
+    if(n>=4){ const k = ord[0]+'-'+ord[1]+'-'+ord[2]+'-'+ord[3]; f4.set(k,(f4.get(k)||0)+1); }
   }
   return {winC, placeC, exa, f4, sims};
 }
@@ -444,11 +775,7 @@ function runMonteCarlo(strengths, sims){
    ========================================================================= */
 function pct(x){return (x*100).toFixed(1)+'%';}
 function fairOdds(p){return p<=0?'∞':(1/p).toFixed(2);}
-function parseOdds(o){
-  if(!o) return null;
-  const m = String(o).match(/(\d+(?:\.\d+)?)/);
-  return m? parseFloat(m[1]) : null;
-}
+function parseOdds(o){ if(!o) return null; const m=String(o).match(/(\d+(?:\.\d+)?)/); return m?parseFloat(m[1]):null; }
 function valueBadge(modelP, sbOdds){
   const sb = parseOdds(sbOdds);
   if(!sb || sb<=1) return '';
@@ -461,18 +788,16 @@ function valueBadge(modelP, sbOdds){
 }
 
 function runEngine(){
-  if(!RUNNERS.length){ alert('Build a field first.'); return; }
+  if(!RUNNERS.length){ alert('Build a field or paste/parse first.'); return; }
   const scored = computeStrengths();
   if(scored.length<2){ alert('Need at least 2 active runners.'); return; }
   const T = parseFloat(document.getElementById('temp').value);
   const sims = parseInt(document.getElementById('sims').value);
 
-  const probs = softmax(scored, T);          // win probs
-  // PL strengths = probs (proportional)
+  const probs = softmax(scored, T);
   const strengths = probs.map(p=>Math.max(p,1e-6));
   const mc = runMonteCarlo(strengths, sims);
 
-  /* Win table */
   const winRows = scored.map((r,i)=>({
     no:r.no, name:r.name, score:r.score, p:probs[i],
     pPlace: (mc.placeC[i][0]+mc.placeC[i][1]+mc.placeC[i][2])/sims,
@@ -495,7 +820,6 @@ function runEngine(){
   });
   document.getElementById('winTable').innerHTML = html+'</tbody>';
 
-  /* Exacta */
   const topEx = parseInt(document.getElementById('topExacta').value)||15;
   const exArr = [...mc.exa.entries()].map(([k,v])=>{
     const [a,b] = k.split('-').map(Number);
@@ -516,17 +840,16 @@ function runEngine(){
   });
   document.getElementById('exTable').innerHTML = eh+'</tbody>';
 
-  /* First 4 */
   const topF4 = parseInt(document.getElementById('topF4').value)||20;
-  const f4Arr = [...mc.f4.entries()].map(([k,v])=>{
-    const ix = k.split('-').map(Number);
-    return {ix, p:v/sims};
-  }).sort((x,y)=>y.p-x.p).slice(0,topF4);
-  cum=0;
   let fh='<thead><tr><th>#</th><th>Combo</th><th>Prob</th><th>Fair $</th><th>Cum %</th></tr></thead><tbody>';
   if(scored.length<4){
     fh = '<tbody><tr><td>Need at least 4 active runners for First 4.</td></tr>';
   } else {
+    const f4Arr = [...mc.f4.entries()].map(([k,v])=>{
+      const ix = k.split('-').map(Number);
+      return {ix, p:v/sims};
+    }).sort((x,y)=>y.p-x.p).slice(0,topF4);
+    cum=0;
     f4Arr.forEach((c,i)=>{
       cum += c.p;
       const labels = c.ix.map(j=>`<span class="runner-no">${scored[j].no}</span>`).join(' &gt; ');
@@ -542,7 +865,6 @@ function runEngine(){
   }
   document.getElementById('f4Table').innerHTML = fh+'</tbody>';
 
-  /* Tickets */
   const top4 = winRows.slice(0,4).map(r=>r.no);
   const top6 = winRows.slice(0,6).map(r=>r.no);
   const standout = winRows[0].no;
@@ -585,11 +907,8 @@ function runEngine(){
   document.getElementById('tickets').innerHTML = ticketHtml;
 }
 
-/* =========================================================================
-   INIT
-   ========================================================================= */
+/* INIT */
 document.getElementById('code').addEventListener('change', ()=>{
-  // reset factor defaults to 50 on code change but keep names/odds
   RUNNERS.forEach(r=>{ r.f = blankRunner(r.no).f; });
   renderField();
 });
