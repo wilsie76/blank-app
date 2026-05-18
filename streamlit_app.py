@@ -15,13 +15,20 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
+from parser import merge_match_days, parse_fixtures_text
+
 FIXTURES_PATH = Path(__file__).parent / "fixtures.json"
 
 
-@st.cache_data
 def load_fixtures(path: Path) -> dict:
     with path.open("r", encoding="utf-8") as f:
         return json.load(f)
+
+
+def save_fixtures(path: Path, data: dict) -> None:
+    with path.open("w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+        f.write("\n")
 
 
 def implied_probabilities(home_odds: float, draw_odds: float, away_odds: float):
@@ -99,6 +106,51 @@ def main() -> None:
 
     data = load_fixtures(FIXTURES_PATH)
     match_days = data.get("match_days", [])
+
+    # --- Sidebar: add new matches by pasting raw text ---
+    with st.sidebar.expander("➕ Add matches", expanded=False):
+        st.caption(
+            "Paste a listing in the same format as your original message: "
+            "a date line, then competition headers, then each match as "
+            "`home / odds / Draw / odds / away / odds`."
+        )
+        pasted = st.text_area("Paste fixtures text", height=200, key="paste_text")
+        col_a, col_b = st.columns(2)
+        preview = col_a.button("Preview")
+        save = col_b.button("Save to fixtures.json", type="primary")
+
+        if preview or save:
+            try:
+                parsed = parse_fixtures_text(pasted or "")
+            except Exception as exc:  # pragma: no cover - defensive
+                st.error(f"Could not parse text: {exc}")
+                parsed = []
+
+            n_matches = sum(
+                len(c["matches"]) for d in parsed for c in d["competitions"]
+            )
+            if n_matches == 0:
+                st.warning("No matches detected. Check the format.")
+            else:
+                st.success(
+                    f"Parsed {n_matches} match(es) across "
+                    f"{sum(len(d['competitions']) for d in parsed)} competition(s) "
+                    f"on {len(parsed)} date(s)."
+                )
+                with st.expander("Parsed preview (JSON)", expanded=False):
+                    st.json(parsed)
+
+                if save:
+                    merged, counters = merge_match_days(match_days, parsed)
+                    data["match_days"] = merged
+                    save_fixtures(FIXTURES_PATH, data)
+                    st.success(
+                        f"Saved. Added {counters['matches_added']} match(es); "
+                        f"skipped {counters['matches_skipped']} duplicate(s); "
+                        f"new dates: {counters['days_added']}, "
+                        f"new competitions: {counters['competitions_added']}."
+                    )
+                    st.rerun()
 
     if not match_days:
         st.info("No fixtures found in fixtures.json.")
