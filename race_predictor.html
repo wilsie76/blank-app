@@ -507,19 +507,32 @@ function statsToFactors(s, code, all, race){
   const f = {form:50,speed:50,class:50,barrier:50,distance:50,jockey:50,trainer:50,track:50,going:50,fresh:50,
              box:50,early:50,besttime:50,mile:50,driver:50,startType:50};
 
-  // FORM from F: string
+  // FORM from F: string. SportsBet/AU convention: RIGHTMOST char = MOST RECENT.
   if(s.formStr){
-    const positions = s.formStr.replace(/-/g,'').split('').map(c=>{
-      const n = parseInt(c); return isNaN(n)? 9 : n;
+    const chars = s.formStr.replace(/-/g,'').split('');
+    // reverse so positions[0] is the most recent run
+    const positions = chars.slice().reverse().map(c=>{
+      if(c && c.toLowerCase()==='x') return 'x'; // DNF / scratched
+      const n = parseInt(c);
+      if(isNaN(n)) return 'x';
+      return n===0 ? 10 : n; // 0 = 10th or worse
     });
     if(positions.length){
-      let sm=0,wsum=0;
-      const map={1:100,2:80,3:65,4:50,5:40,6:30,7:25,8:20,9:15,0:15};
+      let sm=0, wsum=0;
+      const map = {1:100,2:80,3:65,4:50,5:40,6:30,7:25,8:20,9:18,10:15,'x':12};
       positions.forEach((p,i)=>{
+        // recency weighting: newest gets highest weight
         const w = positions.length - i;
-        sm += (map[p]||30)*w; wsum += w;
+        sm += (map[p]||20) * w;
+        wsum += w;
       });
       f.form = Math.round(sm/wsum);
+      // Recent-winner bonus
+      if(positions[0] === 1) f.form = Math.min(100, f.form + 10);
+      if(positions[0] === 2) f.form = Math.min(100, f.form + 5);
+      if(positions[0] === 1 && positions[1] === 1) f.form = Math.min(100, f.form + 5);
+      // Recent collapse penalty
+      if(positions[0] === 'x' || positions[0] === 10) f.form = Math.max(10, f.form - 8);
     }
   } else if(s.recentPositions && s.recentPositions.length){
     const map={1:100,2:80,3:65,4:50,5:40,6:30,7:25,8:20};
