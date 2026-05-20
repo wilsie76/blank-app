@@ -779,10 +779,12 @@ function formScore(r) {
     }
     recentScore = n ? clamp(pts / n, 0, 10) : 4;
   }
-  // Blend in career strike rate when we have it
+  // Blend in career strike rate.  Place rate is weighted higher now so a
+  // genuine consistent placer (e.g. 48% place strike) doesn't get buried
+  // when his sentiment / market signals are negative.
   if (r.winPct != null && r.placePct != null) {
-    const careerScore = clamp(r.winPct * 0.18 + r.placePct * 0.06, 0, 10);
-    return recentScore * 0.65 + careerScore * 0.35;
+    const careerScore = clamp(r.winPct * 0.18 + r.placePct * 0.10, 0, 10);
+    return recentScore * 0.60 + careerScore * 0.40;
   }
   return recentScore;
 }
@@ -790,7 +792,9 @@ function formScore(r) {
 function marketMoveScore(r) {
   if (!r.odds || !r.openOdds) return 5;
   const pct = (r.openOdds - r.odds) / r.openOdds; // positive = firming
-  return clamp(5 + pct * 12.5, 0, 10);
+  // Floor at 2.0 so a heavy drift dampens but doesn't erase the runner's
+  // other signals.  Risk score still adds a penalty when market < 4.
+  return clamp(5 + pct * 12.5, 2, 10);
 }
 
 function barrierScore(b) {
