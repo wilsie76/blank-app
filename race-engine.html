@@ -200,6 +200,7 @@
       <button class="primary" id="btnParse">Parse</button>
       <button class="accent" id="btnPredict">Predict</button>
       <button id="btnSimulate">Simulate</button>
+      <button id="btnClear" title="Clear input and all results">Clear</button>
       <span id="parseInfo" class="muted" style="margin-left: 8px;"></span>
     </div>
   </div>
@@ -300,31 +301,37 @@
 
 /* ---------- 0. Defaults ---------- */
 const DEFAULT_WEIGHTS = {
-  base:        0.22,
-  form:        0.18,
-  market:      0.12,
-  barrier:     0.08,
-  track:       0.07,
-  jt:          0.08,
-  sentiment:   0.10,
+  base:        0.18,
+  form:        0.15,
+  market:      0.10,
+  barrier:     0.07,
+  track:       0.06,
+  jt:          0.07,
+  sentiment:   0.09,
   consistency: 0.08,
-  risk:        0.07
+  rating:      0.12,
+  risk:        0.08
 };
 const WEIGHT_LABELS = {
   base:        'Win odds (base)',
   form:        'Recent form',
   market:      'Market move',
-  barrier:     'Barrier',
+  barrier:     'Barrier / box',
   track:       'Track / distance fit',
   jt:          'Jockey / Trainer',
   sentiment:   'Comments sentiment',
   consistency: 'Consistency',
+  rating:      'SB / class rating',
   risk:        'Risk penalty'
 };
 
 /* ---------- 1. PARSER ---------- */
 function parseSportsbet(raw) {
   if (!raw || !raw.trim()) return { runners: [], race: {} };
+  // Try the structured Sportsbet card parser first
+  const card = parseSportsbetCard(raw);
+  if (card && card.runners.length) return card;
+
   const lines = raw.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
   const sepRe = /\s*\|\s*|\t+|\s{2,}/;
 
@@ -400,8 +407,210 @@ function blankRunner(num, name) {
     jockey: '',
     trainer: '',
     comment: '',
+    sbRating: null,
+    winPct: null,
+    placePct: null,
+    careerStarts: null,
+    careerWins: null,
+    careerSeconds: null,
+    careerThirds: null,
+    bestTime: null,
+    earlySpeed: null,
     raw: ''
   };
+}
+
+/* ---------- 1b. Structured Sportsbet card parser ----------
+   Recognises the full card layout that Sportsbet copy-paste produces:
+   per-runner blocks with F:, T:, Early Speed, four odds (Open/Fluc/Fluc/Current),
+   "Recent:" history, "Runner Comments", "Bio:", "Last 6", "Career", "Win %",
+   "Place %", "Best Time", "SB Rating".  First odd = OPEN, last odd = CURRENT.
+*/
+function parseSportsbetCard(raw) {
+  if (!/Runner Comments|SB Rating|Last \d/i.test(raw)) return null;
+
+  // Keep blank lines so we can still walk linearly, but trim each line
+  const lines = raw.split(/\r?\n/).map(l => l.trim());
+  const race = {};
+
+  // Race header: "20:47 YARM'TH DOGS 462yds" or "Race 5 ... 1400m"
+  for (let i = 0; i < Math.min(lines.length, 50); i++) {
+    const l = lines[i];
+    if (!l) continue;
+    let m = l.match(/(\d{1,2}:\d{2})\s+([A-Z][A-Z'`\-.\s]+?)\s+(\d{3,4})\s*(yds|m)\b/i);
+    if (m) {
+      race.time = m[1];
+      race.track = m[2].trim();
+      race.distance = m[3] + m[4];
+      break;
+    }
+    m = l.match(/^Race\s+(\d+)/i);
+    if (m && !race.raceNo) race.raceNo = m[1];
+    const dist = l.match(/(\d{3,4})\s*(m|yds)\b/i);
+    if (dist && !race.distance) race.distance = dist[1] + dist[2];
+  }
+  race.isDogs = /\bDOGS\b|Greyhound|\byds\b/i.test(raw);
+
+  // Detect runner block start indices.  A runner header is "N. Name" followed
+  // within a few lines by "F:", "T:", "J:" or "Early Speed:".
+  const blockStarts = [];
+  for (let i = 0; i < lines.length; i++) {
+    const m = lines[i].match(/^(\d{1,2})\.\s+([A-Z][A-Za-z'.\-/ ]+)$/);
+    if (!m) continue;
+    let isRunner = false;
+    for (let j = i + 1; j < Math.min(i + 10, lines.length); j++) {
+      if (/^F:\s*\S/i.test(lines[j]) || /^T:\s*[A-Z]/i.test(lines[j]) ||
+          /^J:\s*[A-Z]/i.test(lines[j]) || /^Early Speed/i.test(lines[j])) {
+        isRunner = true;
+        break;
+      }
+    }
+    if (isRunner) blockStarts.push(i);
+  }
+  if (!blockStarts.length) return null;
+
+  const runners = [];
+  for (let bi = 0; bi < blockStarts.length; bi++) {
+    const start = blockStarts[bi];
+    const end = bi + 1 < blockStarts.length ? blockStarts[bi + 1] : lines.length;
+    const r = parseRunnerBlock(lines.slice(start, end), race);
+    if (r) runners.push(r);
+  }
+  if (!runners.length) return null;
+
+  // De-duplicate by runner number
+  const seen = new Set();
+  const out = [];
+  for (const r of runners) {
+    if (seen.has(r.num)) continue;
+    seen.add(r.num);
+    out.push(r);
+  }
+  return { race, runners: out };
+}
+
+function parseRunnerBlock(lines, race) {
+  if (!lines.length) return null;
+  const head = lines[0].match(/^(\d{1,2})\.\s+(.+)$/);
+  if (!head) return null;
+  const r = blankRunner(parseInt(head[1], 10), head[2].trim());
+
+  // For greyhound races the trap (box) is the runner number
+  if (race.isDogs) r.barrier = r.num;
+
+  const oddsBeforeRecent = [];
+  let inRecent = false;
+  let foundComments = false;
+
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i];
+    if (!line) continue;
+    let m;
+
+    if (/^Recent:?$/i.test(line)) { inRecent = true; continue; }
+
+    if (/^Runner Comments$/i.test(line)) {
+      const buf = [];
+      for (let j = i + 1; j < lines.length; j++) {
+        if (/^(Bio:|Last\s\d|Career|Win\s%|Place\s%|Best\sTime|Whelped|Prize\sMoney|SB\sRating|Recent:?|Colour:|Sire:|Dam:|Sex:)$/i.test(lines[j])) break;
+        if (/^Top Tip$/i.test(lines[j])) continue;
+        if (lines[j]) buf.push(lines[j]);
+      }
+      r.comment = buf.join(' ').replace(/\s+/g, ' ').trim();
+      foundComments = true;
+      continue;
+    }
+
+    if (foundComments) {
+      // Metadata sections after the comment
+      if (/^Last\s\d$/i.test(line)) {
+        for (let j = i + 1; j < lines.length; j++) {
+          if (lines[j] && /^[\dxXLFf]+$/.test(lines[j])) {
+            if (!r.form || lines[j].length > r.form.length) r.form = lines[j];
+            break;
+          }
+          if (lines[j]) break;
+        }
+        continue;
+      }
+      if (/^Career$/i.test(line)) {
+        for (let j = i + 1; j < lines.length; j++) {
+          const cm = lines[j].match(/^(\d+):\s*(\d+)-(\d+)-(\d+)$/);
+          if (cm) {
+            r.careerStarts = +cm[1]; r.careerWins = +cm[2];
+            r.careerSeconds = +cm[3]; r.careerThirds = +cm[4];
+            break;
+          }
+          if (lines[j]) break;
+        }
+        continue;
+      }
+      if (/^Win\s%$/i.test(line)) {
+        for (let j = i + 1; j < lines.length; j++) {
+          const pm = lines[j].match(/^(\d+)\s*%/);
+          if (pm) { r.winPct = +pm[1]; break; }
+          if (lines[j]) break;
+        }
+        continue;
+      }
+      if (/^Place\s%$/i.test(line)) {
+        for (let j = i + 1; j < lines.length; j++) {
+          const pm = lines[j].match(/^(\d+)\s*%/);
+          if (pm) { r.placePct = +pm[1]; break; }
+          if (lines[j]) break;
+        }
+        continue;
+      }
+      if (/^Best\sTime$/i.test(line)) {
+        for (let j = i + 1; j < lines.length; j++) {
+          const tm = lines[j].match(/^(\d+\.\d+)$/);
+          if (tm) { r.bestTime = parseFloat(tm[1]); break; }
+          if (lines[j]) break;
+        }
+        continue;
+      }
+      if (/^SB\sRating$/i.test(line)) {
+        for (let j = i + 1; j < lines.length; j++) {
+          const sm = lines[j].match(/^(\d+)$/);
+          if (sm) { r.sbRating = +sm[1]; break; }
+          if (lines[j]) break;
+        }
+        continue;
+      }
+      continue;
+    }
+
+    // Pre-comment header: F:, T:, J:, D:, Early Speed:, odds, SP marker
+    if ((m = line.match(/^F:\s*(\S.*)$/i))) {
+      const cleaned = m[1].replace(/[^\dxXLFf]/g, '');
+      if (cleaned) r.form = cleaned;
+      continue;
+    }
+    if ((m = line.match(/^T:\s*(.+)$/i))) { r.trainer = m[1].trim(); continue; }
+    if ((m = line.match(/^J:\s*(.+)$/i))) { r.jockey  = m[1].trim(); continue; }
+    if ((m = line.match(/^D:\s*(.+)$/i))) { r.jockey  = m[1].trim(); continue; }
+    if ((m = line.match(/^Early Speed:\s*(.+)$/i))) { r.earlySpeed = m[1].trim(); continue; }
+    if (/^SP$/i.test(line)) continue;
+    if (/^Win\s+Fixed$/i.test(line)) continue;
+
+    // Standalone odds
+    if (/^\$?\d{1,3}\.\d{1,2}$/.test(line)) {
+      const v = parseFloat(line.replace(/^\$/, ''));
+      if (v >= 1.01 && v <= 999 && !inRecent) oddsBeforeRecent.push(v);
+      continue;
+    }
+  }
+
+  // First odd = OPEN, last = CURRENT, middle = flucs
+  if (oddsBeforeRecent.length === 1) {
+    r.odds = oddsBeforeRecent[0];
+  } else if (oddsBeforeRecent.length >= 2) {
+    r.openOdds = oddsBeforeRecent[0];
+    r.odds     = oddsBeforeRecent[oddsBeforeRecent.length - 1];
+    if (oddsBeforeRecent.length > 2) r.fluc = oddsBeforeRecent.slice(1, -1);
+  }
+
+  return r;
 }
 
 function cleanName(s) {
@@ -504,16 +713,22 @@ function scoreRunners(runners, weights) {
     r.impliedProb = r.odds ? (1 / r.odds) / totalImp : 1 / runners.length;
   }
 
+  // Pre-compute SB Rating range so the rating component is field-relative
+  const ratings = runners.map(r => r.sbRating).filter(v => v != null);
+  const maxR = ratings.length ? Math.max(...ratings) : 100;
+  const minR = ratings.length ? Math.min(...ratings) : 80;
+
   return runners.map(r => {
     const c = {};
     c.base        = clamp(r.impliedProb * 30, 0, 10);
-    c.form        = formScore(r.form);
+    c.form        = formScore(r);
     c.market      = marketMoveScore(r);
     c.barrier     = barrierScore(r.barrier);
     c.track       = trackScore(r);
     c.jt          = jtScore(r);
     c.sentiment   = sentimentScore(r.comment);
     c.consistency = consistencyScore(r.form);
+    c.rating      = ratingScore(r, minR, maxR);
     c.risk        = riskScore(r, c);
 
     const total =
@@ -524,7 +739,8 @@ function scoreRunners(runners, weights) {
       c.track * weights.track +
       c.jt * weights.jt +
       c.sentiment * weights.sentiment +
-      c.consistency * weights.consistency -
+      c.consistency * weights.consistency +
+      c.rating * weights.rating -
       c.risk * weights.risk;
 
     return {
@@ -538,21 +754,37 @@ function scoreRunners(runners, weights) {
 
 function clamp(x, lo, hi) { return Math.max(lo, Math.min(hi, x)); }
 
-function formScore(form) {
-  if (!form) return 4;
-  const tokens = form.split('').slice(-5);
-  let pts = 0, n = 0;
-  for (const t of tokens) {
-    n++;
-    if (t === '1') pts += 10;
-    else if (t === '2') pts += 7.5;
-    else if (t === '3') pts += 5.5;
-    else if (t === '4') pts += 4;
-    else if (t === '5') pts += 2.5;
-    else if (/[6-9]/.test(t)) pts += 1.5;
-    else pts += 0;
+function ratingScore(r, minR, maxR) {
+  if (r.sbRating == null) return 5;
+  if (maxR === minR) return 7;
+  // Field-relative scaling, lifted slightly so the best rating sits near the top
+  return clamp(((r.sbRating - minR) / (maxR - minR)) * 10, 0, 10);
+}
+
+function formScore(r) {
+  const form = r.form || '';
+  let recentScore = 4; // neutral default
+  if (form) {
+    const tokens = form.split('').slice(-5);
+    let pts = 0, n = 0;
+    for (const t of tokens) {
+      n++;
+      if (t === '1') pts += 10;
+      else if (t === '2') pts += 7.5;
+      else if (t === '3') pts += 5.5;
+      else if (t === '4') pts += 4;
+      else if (t === '5') pts += 2.5;
+      else if (/[6-9]/.test(t)) pts += 1.5;
+      else pts += 0;
+    }
+    recentScore = n ? clamp(pts / n, 0, 10) : 4;
   }
-  return n ? clamp(pts / n, 0, 10) : 4;
+  // Blend in career strike rate when we have it
+  if (r.winPct != null && r.placePct != null) {
+    const careerScore = clamp(r.winPct * 0.18 + r.placePct * 0.06, 0, 10);
+    return recentScore * 0.65 + careerScore * 0.35;
+  }
+  return recentScore;
 }
 
 function marketMoveScore(r) {
@@ -625,22 +857,29 @@ function riskScore(r, c) {
   if (c.consistency < 4) risk += 1.5;
   if (c.sentiment < 4) risk += 1;
   if (r.odds && r.odds > 30) risk += 1;
+  // Career data risk: unproven (very few starts) and low place strike
+  if (r.careerStarts != null && r.careerStarts <= 2) risk += 1.5;
+  if (r.placePct != null && r.placePct < 25) risk += 1;
   return clamp(risk, 0, 10);
 }
 
 function buildExplanation(r, c, w) {
   const lines = [];
   lines.push(`<strong>Win odds</strong> ${r.odds || 'n/a'} -> implied ${(r.impliedProb * 100).toFixed(1)}% (base rating ${c.base.toFixed(1)})`);
-  lines.push(`<strong>Form</strong> "${r.form || 'n/a'}" -> form ${c.form.toFixed(1)}, consistency ${c.consistency.toFixed(1)}`);
+  lines.push(`<strong>SB Rating</strong> ${r.sbRating ?? 'n/a'} -> rating component ${c.rating.toFixed(1)}`);
+  let formNote = `<strong>Form</strong> "${r.form || 'n/a'}"`;
+  if (r.winPct != null) formNote += ` &middot; career ${r.careerStarts ?? '?'} starts ${r.winPct}% win / ${r.placePct}% place`;
+  formNote += ` -> form ${c.form.toFixed(1)}, consistency ${c.consistency.toFixed(1)}`;
+  lines.push(formNote);
   if (r.openOdds) {
     const dir = c.market < 4.5 ? 'drifting' : c.market > 5.5 ? 'firming' : 'stable';
     lines.push(`<strong>Market</strong> ${r.openOdds} -> ${r.odds} (${dir}, rating ${c.market.toFixed(1)})`);
   } else {
     lines.push(`<strong>Market</strong> no open odds available -> neutral ${c.market.toFixed(1)}`);
   }
-  lines.push(`<strong>Barrier</strong> ${r.barrier ?? 'n/a'} -> rating ${c.barrier.toFixed(1)}`);
+  lines.push(`<strong>Box / barrier</strong> ${r.barrier ?? 'n/a'} -> rating ${c.barrier.toFixed(1)}`);
   lines.push(`<strong>Track / dist fit</strong> ${c.track.toFixed(1)} | <strong>Jockey/Trainer</strong> ${c.jt.toFixed(1)}`);
-  lines.push(`<strong>Comment sentiment</strong> ${c.sentiment.toFixed(1)} from comment "${(r.comment || '').slice(0, 80)}${(r.comment || '').length > 80 ? '...' : ''}"`);
+  lines.push(`<strong>Comment sentiment</strong> ${c.sentiment.toFixed(1)} from "${(r.comment || 'no comment').slice(0, 100)}${(r.comment || '').length > 100 ? '...' : ''}"`);
   lines.push(`<strong>Risk penalty</strong> ${c.risk.toFixed(1)} (subtracted)`);
   return lines;
 }
@@ -755,15 +994,17 @@ function generatePicks(simResults) {
 /* ---------- 5. RENDER ---------- */
 function renderRaceMeta(race, runners) {
   const el = document.getElementById('raceMeta');
-  if (!race || (!race.raceNo && !race.distance && !race.track)) {
+  if (!race || (!race.raceNo && !race.distance && !race.track && !race.time)) {
     el.innerHTML = `<div class="race-meta"><div class="item"><small>Runners</small><strong>${runners.length}</strong></div></div>`;
     return;
   }
   el.innerHTML = `<div class="race-meta">
+    ${race.time ? `<div class="item"><small>Time</small><strong>${escapeHtml(race.time)}</strong></div>` : ''}
     ${race.raceNo ? `<div class="item"><small>Race</small><strong>${escapeHtml(race.raceNo)}</strong></div>` : ''}
     ${race.track ? `<div class="item"><small>Track</small><strong>${escapeHtml(race.track)}</strong></div>` : ''}
     ${race.distance ? `<div class="item"><small>Distance</small><strong>${escapeHtml(race.distance)}</strong></div>` : ''}
     ${race.condition ? `<div class="item"><small>Conditions</small><strong>${escapeHtml(race.condition)}</strong></div>` : ''}
+    ${race.isDogs ? `<div class="item"><small>Code</small><strong>Greyhounds</strong></div>` : ''}
     <div class="item"><small>Runners</small><strong>${runners.length}</strong></div>
   </div>`;
 }
@@ -774,8 +1015,9 @@ function renderRunners(runners) {
     el.innerHTML = '<div class="empty">No runners parsed. Try a different format or click <strong>Load sample</strong>.</div>';
     return;
   }
-  let html = `<table><thead><tr>
+  let html = `<div style="overflow-x:auto;"><table><thead><tr>
     <th>#</th><th>Runner</th><th>Bx</th><th>Odds</th><th>Open</th><th>Form</th>
+    <th>SB</th><th>W%</th><th>P%</th><th>Best</th>
     <th>Jockey</th><th>Trainer</th><th>Comment</th>
   </tr></thead><tbody>`;
   for (const r of runners) {
@@ -786,22 +1028,26 @@ function renderRunners(runners) {
       <td>${r.odds ? '$' + r.odds.toFixed(2) : '-'}</td>
       <td>${r.openOdds ? '$' + r.openOdds.toFixed(2) : '-'}</td>
       <td><code>${escapeHtml(r.form || '-')}</code></td>
+      <td class="center"><strong>${r.sbRating ?? '-'}</strong></td>
+      <td class="center">${r.winPct != null ? r.winPct + '%' : '-'}</td>
+      <td class="center">${r.placePct != null ? r.placePct + '%' : '-'}</td>
+      <td class="center">${r.bestTime != null ? r.bestTime : '-'}</td>
       <td>${escapeHtml(r.jockey || '-')}</td>
       <td>${escapeHtml(r.trainer || '-')}</td>
       <td class="muted" style="max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(r.comment || '')}">${escapeHtml(r.comment || '')}</td>
     </tr>`;
   }
-  html += '</tbody></table>';
+  html += '</tbody></table></div>';
   el.innerHTML = html;
 }
 
 function renderRankings(scored) {
   const el = document.getElementById('rankingsTable');
   const sorted = [...scored].sort((a, b) => b.score - a.score);
-  let html = `<table><thead><tr>
+  let html = `<div style="overflow-x:auto;"><table><thead><tr>
     <th>Rank</th><th>#</th><th>Runner</th><th>Score</th>
     <th>Base</th><th>Form</th><th>Mkt</th><th>Bx</th><th>Trk</th>
-    <th>J/T</th><th>Snt</th><th>Cns</th><th>Risk</th>
+    <th>J/T</th><th>Snt</th><th>Cns</th><th>Rtg</th><th>Risk</th>
   </tr></thead><tbody>`;
   let i = 1;
   for (const s of sorted) {
@@ -819,11 +1065,12 @@ function renderRankings(scored) {
       <td>${c.jt.toFixed(1)}</td>
       <td>${c.sentiment.toFixed(1)}</td>
       <td>${c.consistency.toFixed(1)}</td>
+      <td class="success-text">${c.rating.toFixed(1)}</td>
       <td class="${c.risk > 5 ? 'danger-text' : c.risk > 3 ? 'warn-text' : ''}">${c.risk.toFixed(1)}</td>
     </tr>`;
     i++;
   }
-  html += '</tbody></table>';
+  html += '</tbody></table></div>';
   el.innerHTML = html;
   document.getElementById('rankingsSection').style.display = '';
 }
@@ -1049,6 +1296,27 @@ function attachEvents() {
   document.getElementById('btnSample').addEventListener('click', () => {
     document.getElementById('inputText').value = SAMPLE_DATA;
     document.getElementById('parseInfo').textContent = 'Sample loaded - press Parse';
+  });
+
+  document.getElementById('btnClear').addEventListener('click', () => {
+    if (document.getElementById('inputText').value.trim() &&
+        !confirm('Clear input and all results?')) return;
+    document.getElementById('inputText').value = '';
+    document.getElementById('parseInfo').textContent = '';
+    STATE.runners = [];
+    STATE.race = {};
+    STATE.scored = [];
+    STATE.sims = [];
+    STATE.picks = null;
+    STATE.simInfo = '';
+    document.getElementById('raceMeta').innerHTML = '';
+    document.getElementById('runnersTable').innerHTML =
+      '<div class="empty">No runners yet. Paste data and press <strong>Parse</strong>.</div>';
+    document.getElementById('rankingsSection').style.display = 'none';
+    document.getElementById('picksSection').style.display = 'none';
+    document.getElementById('simSection').style.display = 'none';
+    document.getElementById('explSection').style.display = 'none';
+    document.getElementById('inputText').focus();
   });
 
   document.getElementById('btnExport').addEventListener('click', exportResults);
