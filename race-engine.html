@@ -959,10 +959,23 @@ function generatePicks(simResults) {
     .sort((a, b) => b.conservScore - a.conservScore)
     .slice(0, 4);
 
-  const upsetCandidates = [...simResults]
-    .filter(r => r.runner.odds && r.runner.odds >= 6)
+  // Upset top 4: prioritise long-priced runners by their top-4 sim
+  // probability, then pad with the highest-scored remaining runners.
+  // The threshold is $5 (was $6) so plausible-but-overlooked place-getters
+  // in small fields still qualify.
+  const upsetByOdds = [...simResults]
+    .filter(r => r.runner.odds && r.runner.odds >= 5)
     .sort((a, b) => b.p4 - a.p4);
-  const upset = upsetCandidates.length >= 4 ? upsetCandidates.slice(0, 4) : byScore.slice(0, 4);
+  const upset = [];
+  const upsetSeen = new Set();
+  for (const r of upsetByOdds) {
+    if (upset.length >= 4) break;
+    upset.push(r); upsetSeen.add(r.runner.num);
+  }
+  for (const r of byScore) {
+    if (upset.length >= 4) break;
+    if (!upsetSeen.has(r.runner.num)) { upset.push(r); upsetSeen.add(r.runner.num); }
+  }
 
   const value = [...simResults]
     .map(r => ({ ...r, edge: r.p1 - r.impliedProb }))
