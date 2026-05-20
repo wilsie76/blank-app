@@ -1,0 +1,1130 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Race Engine - Sportsbet Prediction Lab</title>
+<style>
+  :root {
+    --bg: #0b0d10;
+    --panel: #131820;
+    --panel-2: #1a2029;
+    --border: #232c38;
+    --text: #e6ebf2;
+    --muted: #8a96a8;
+    --accent: #4ade80;
+    --accent-2: #22d3ee;
+    --warn: #fbbf24;
+    --danger: #f87171;
+    --info: #60a5fa;
+    --gold: #facc15;
+    --silver: #cbd5e1;
+    --bronze: #d97706;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, system-ui, sans-serif;
+    font-size: 14px; line-height: 1.5;
+  }
+  .app { max-width: 1400px; margin: 0 auto; padding: 20px; }
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    border-bottom: 1px solid var(--border); padding-bottom: 16px; margin-bottom: 20px;
+    flex-wrap: wrap; gap: 12px;
+  }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .logo {
+    width: 40px; height: 40px; border-radius: 10px;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 800; color: #06140a; font-size: 14px;
+  }
+  h1 { margin: 0; font-size: 18px; letter-spacing: 0.3px; }
+  h1 small { color: var(--muted); font-weight: 400; margin-left: 8px; font-size: 13px; }
+  .section {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 12px; padding: 16px; margin-bottom: 16px;
+  }
+  .section h2 {
+    margin: 0 0 12px 0; font-size: 13px; letter-spacing: 0.5px;
+    text-transform: uppercase; color: var(--muted);
+  }
+  textarea {
+    width: 100%; min-height: 200px;
+    background: var(--bg); color: var(--text);
+    border: 1px solid var(--border); border-radius: 8px; padding: 12px;
+    font-family: ui-monospace, "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
+    font-size: 12px; resize: vertical; outline: none;
+  }
+  textarea:focus { border-color: var(--accent); }
+  button {
+    background: var(--panel-2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 8px;
+    padding: 8px 14px; font-size: 13px; font-weight: 600;
+    cursor: pointer; transition: all 0.15s;
+  }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); color: #06140a; border-color: var(--accent); }
+  button.primary:hover { filter: brightness(1.1); }
+  button.accent { background: var(--accent-2); color: #052832; border-color: var(--accent-2); }
+  button.accent:hover { filter: brightness(1.1); }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .grid { display: grid; gap: 12px; }
+  .grid-2 { grid-template-columns: 1fr 1fr; }
+  .grid-3 { grid-template-columns: 1fr 1fr 1fr; }
+  .grid-4 { grid-template-columns: repeat(4, 1fr); }
+  @media (max-width: 1000px) {
+    .grid-3, .grid-4 { grid-template-columns: 1fr 1fr; }
+  }
+  @media (max-width: 600px) {
+    .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+  }
+  .kvp { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .slider {
+    display: flex; flex-direction: column; gap: 4px;
+    background: var(--panel-2); border-radius: 8px; padding: 10px 12px;
+    border: 1px solid var(--border);
+  }
+  .slider label {
+    font-size: 11px; color: var(--muted); text-transform: uppercase;
+    letter-spacing: 0.5px; display: flex; justify-content: space-between;
+  }
+  .slider .val { color: var(--accent); font-weight: 700; }
+  input[type="range"] { width: 100%; accent-color: var(--accent); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border); }
+  th {
+    font-weight: 600; color: var(--muted); font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  tbody tr:hover { background: var(--panel-2); }
+  .runner-num {
+    display: inline-block; min-width: 26px; height: 26px; padding: 0 6px;
+    border-radius: 6px; background: var(--panel-2); text-align: center;
+    line-height: 26px; font-weight: 700; font-size: 12px;
+    color: var(--accent); border: 1px solid var(--border);
+  }
+  .tag {
+    display: inline-block; padding: 2px 8px; border-radius: 999px;
+    font-size: 11px; font-weight: 600; background: var(--panel-2);
+    border: 1px solid var(--border); margin-right: 4px;
+  }
+  .tag.green { color: var(--accent); border-color: var(--accent); }
+  .tag.amber { color: var(--warn); border-color: var(--warn); }
+  .tag.red { color: var(--danger); border-color: var(--danger); }
+  .tag.blue { color: var(--info); border-color: var(--info); }
+  .pick-card {
+    background: var(--panel-2); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px;
+  }
+  .pick-card h3 {
+    margin: 0 0 8px 0; font-size: 11px; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.6px;
+  }
+  .pick-card .runner-name { font-size: 16px; font-weight: 700; }
+  .pick-card .reason { font-size: 12px; color: var(--muted); margin-top: 6px; }
+  .position-badge {
+    display: inline-block; width: 26px; height: 26px; border-radius: 50%;
+    text-align: center; line-height: 26px; font-weight: 800; color: #000;
+    font-size: 12px;
+  }
+  .pos-1 { background: var(--gold); }
+  .pos-2 { background: var(--silver); }
+  .pos-3 { background: var(--bronze); color: #fff; }
+  .pos-4 { background: #94a3b8; }
+  .bar {
+    display: inline-block; height: 8px;
+    background: linear-gradient(90deg, var(--accent-2), var(--accent));
+    border-radius: 4px; vertical-align: middle;
+  }
+  .bar-bg {
+    display: inline-block; width: 80px; height: 8px;
+    background: var(--panel-2); border-radius: 4px;
+    overflow: hidden; vertical-align: middle; margin-left: 6px;
+  }
+  .muted { color: var(--muted); }
+  .right { text-align: right; }
+  .center { text-align: center; }
+  .warn-text { color: var(--warn); }
+  .danger-text { color: var(--danger); }
+  .success-text { color: var(--accent); }
+  .explanation-list { padding-left: 18px; margin: 4px 0; font-size: 12px; }
+  .explanation-list li { margin-bottom: 4px; color: var(--muted); }
+  .explanation-list li strong { color: var(--text); }
+  select {
+    background: var(--panel-2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 8px;
+    padding: 6px 10px; font-size: 13px; outline: none;
+  }
+  .divider { height: 1px; background: var(--border); margin: 12px 0; }
+  details {
+    background: var(--panel-2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 8px 12px; margin-bottom: 8px;
+  }
+  details summary { cursor: pointer; font-weight: 600; font-size: 13px; }
+  details[open] summary {
+    margin-bottom: 8px; border-bottom: 1px solid var(--border); padding-bottom: 8px;
+  }
+  .empty { padding: 32px; text-align: center; color: var(--muted); }
+  .race-meta {
+    display: flex; gap: 16px; flex-wrap: wrap; align-items: center;
+    background: var(--panel-2); padding: 10px 14px; border-radius: 8px;
+    border: 1px solid var(--border); margin-bottom: 12px;
+  }
+  .race-meta .item { display: flex; flex-direction: column; }
+  .race-meta .item small { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .race-meta .item strong { color: var(--text); font-size: 14px; }
+  code { background: var(--panel-2); padding: 1px 6px; border-radius: 4px; font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brand">
+      <div class="logo">RE</div>
+      <h1>Race Engine <small>Sportsbet Prediction Lab</small></h1>
+    </div>
+    <div class="row">
+      <button id="btnSample">Load sample</button>
+      <button id="btnExport">Copy / export</button>
+    </div>
+  </header>
+
+  <!-- INPUT -->
+  <div class="section">
+    <h2>1. Paste Sportsbet text</h2>
+    <textarea id="inputText" placeholder="Paste raw Sportsbet runner data here. The parser is tolerant and accepts tabular (| or tab separated), block, or simple line-per-runner formats.&#10;&#10;Example line:&#10;1. Storm Caller | Bx 3 | 3.20 | 4.50 | 12132 | J: J. Allen | T: C. Waller | Strong recent form, firming late, distance suit&#10;&#10;Click 'Load sample' to see expected format."></textarea>
+    <div class="row" style="margin-top: 10px;">
+      <button class="primary" id="btnParse">Parse</button>
+      <button class="accent" id="btnPredict">Predict</button>
+      <button id="btnSimulate">Simulate</button>
+      <span id="parseInfo" class="muted" style="margin-left: 8px;"></span>
+    </div>
+  </div>
+
+  <!-- WEIGHTS / CONTROLS -->
+  <div class="section">
+    <h2>2. Weights & volatility</h2>
+    <div class="grid grid-4" id="weightSliders"></div>
+    <div class="divider"></div>
+    <div class="grid grid-3">
+      <div class="slider">
+        <label>Volatility mode <span class="val" id="modeLabel">Normal</span></label>
+        <select id="mode">
+          <option value="normal">Normal</option>
+          <option value="wet">Wet / chaotic</option>
+          <option value="upset">Upset</option>
+        </select>
+      </div>
+      <div class="slider">
+        <label>Volatility temperature <span class="val" id="tempVal">1.0</span></label>
+        <input type="range" id="temperature" min="0.5" max="3.0" step="0.1" value="1.0">
+      </div>
+      <div class="slider">
+        <label>Simulations <span class="val" id="simVal">2000</span></label>
+        <input type="range" id="simCount" min="1000" max="10000" step="500" value="2000">
+      </div>
+    </div>
+  </div>
+
+  <!-- RUNNERS TABLE -->
+  <div class="section" id="runnersSection">
+    <h2>3. Parsed runners</h2>
+    <div id="raceMeta"></div>
+    <div id="runnersTable"><div class="empty">No runners yet. Paste data and press <strong>Parse</strong>.</div></div>
+  </div>
+
+  <!-- RANKINGS -->
+  <div class="section" id="rankingsSection" style="display:none;">
+    <h2>4. Ratings & ranking</h2>
+    <div id="rankingsTable"></div>
+  </div>
+
+  <!-- PICKS -->
+  <div class="section" id="picksSection" style="display:none;">
+    <h2>5. Picks</h2>
+    <div class="grid grid-4" id="topPicks"></div>
+    <div class="divider"></div>
+    <div class="grid grid-3">
+      <div class="pick-card">
+        <h3>Conservative top 4</h3>
+        <div id="conservativeTop"></div>
+      </div>
+      <div class="pick-card">
+        <h3>Upset top 4</h3>
+        <div id="upsetTop"></div>
+      </div>
+      <div class="pick-card">
+        <h3>Value & lay</h3>
+        <div id="valueLay"></div>
+      </div>
+    </div>
+    <div class="divider"></div>
+    <div class="grid grid-3">
+      <div class="pick-card">
+        <h3>Best win bet</h3>
+        <div id="bestWin"></div>
+      </div>
+      <div class="pick-card">
+        <h3>Best place bet</h3>
+        <div id="bestPlace"></div>
+      </div>
+      <div class="pick-card">
+        <h3>Exotics</h3>
+        <div id="exotics"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SIMULATIONS -->
+  <div class="section" id="simSection" style="display:none;">
+    <h2>6. Monte Carlo distribution</h2>
+    <div id="simSummary" class="muted" style="margin-bottom: 10px;"></div>
+    <div id="simTable"></div>
+  </div>
+
+  <!-- EXPLANATIONS -->
+  <div class="section" id="explSection" style="display:none;">
+    <h2>7. Explanations</h2>
+    <div id="explanations"></div>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   RACE ENGINE - single-file Sportsbet prediction lab
+   Pipeline: parse -> component scoring -> Monte Carlo simulate
+   ============================================================ */
+
+/* ---------- 0. Defaults ---------- */
+const DEFAULT_WEIGHTS = {
+  base:        0.22,
+  form:        0.18,
+  market:      0.12,
+  barrier:     0.08,
+  track:       0.07,
+  jt:          0.08,
+  sentiment:   0.10,
+  consistency: 0.08,
+  risk:        0.07
+};
+const WEIGHT_LABELS = {
+  base:        'Win odds (base)',
+  form:        'Recent form',
+  market:      'Market move',
+  barrier:     'Barrier',
+  track:       'Track / distance fit',
+  jt:          'Jockey / Trainer',
+  sentiment:   'Comments sentiment',
+  consistency: 'Consistency',
+  risk:        'Risk penalty'
+};
+
+/* ---------- 1. PARSER ---------- */
+function parseSportsbet(raw) {
+  if (!raw || !raw.trim()) return { runners: [], race: {} };
+  const lines = raw.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  const sepRe = /\s*\|\s*|\t+|\s{2,}/;
+
+  // Detect race meta from header lines
+  const race = {};
+  for (const l of lines.slice(0, 4)) {
+    const trk = l.match(/race\s*(\d+)/i);
+    if (trk) race.raceNo = trk[1];
+    const dist = l.match(/(\d{3,4})\s*m\b/i);
+    if (dist) race.distance = dist[1] + 'm';
+    const trackM = l.match(/(?:at|@)\s+([A-Z][A-Za-z .'\-]+)/);
+    if (trackM) race.track = trackM[1].trim();
+    const cond = l.match(/(good|soft|heavy|firm|synthetic)\s*(\d)?/i);
+    if (cond) race.condition = cond[0];
+  }
+
+  // Decide if input is tabular (line-per-runner with separators)
+  let tabular = 0;
+  for (const l of lines) {
+    if (/^\d{1,2}[.)\s]+\S/.test(l) && sepRe.test(l)) tabular++;
+  }
+
+  const runners = [];
+  if (tabular >= 3) {
+    for (const line of lines) {
+      const m = line.match(/^(\d{1,2})[.)\s]+(.+)$/);
+      if (!m) continue;
+      const num = parseInt(m[1], 10);
+      const parts = m[2].split(sepRe).map(p => p.trim()).filter(Boolean);
+      if (parts.length < 2) continue;
+      const r = blankRunner(num, parts[0]);
+      enrichFromParts(r, parts.slice(1));
+      runners.push(r);
+    }
+  } else {
+    // Block format - each runner is a multi-line block until next runner
+    let cur = null;
+    for (const line of lines) {
+      const m = line.match(/^(\d{1,2})[.)\s]+([A-Za-z][A-Za-z0-9 .'\-/]+)/);
+      if (m) {
+        if (cur) runners.push(cur);
+        cur = blankRunner(parseInt(m[1], 10), m[2].trim());
+        const rest = line.slice(m[0].length).trim();
+        if (rest) enrichFromParts(cur, rest.split(sepRe));
+      } else if (cur) {
+        enrichFromParts(cur, [line]);
+      }
+    }
+    if (cur) runners.push(cur);
+  }
+
+  // De-duplicate by runner number
+  const seen = new Set();
+  const out = [];
+  for (const r of runners) {
+    if (seen.has(r.num)) continue;
+    seen.add(r.num);
+    out.push(r);
+  }
+  return { race, runners: out };
+}
+
+function blankRunner(num, name) {
+  return {
+    num,
+    name: cleanName(name),
+    barrier: null,
+    odds: null,
+    openOdds: null,
+    placeOdds: null,
+    fluc: [],
+    form: '',
+    jockey: '',
+    trainer: '',
+    comment: '',
+    raw: ''
+  };
+}
+
+function cleanName(s) {
+  return String(s).replace(/\s+/g, ' ').replace(/^["']|["']$/g, '').trim();
+}
+
+function enrichFromParts(r, parts) {
+  for (const raw of parts) {
+    const t = String(raw).trim();
+    if (!t) continue;
+    r.raw += ' ' + t;
+
+    // Barrier / box / draw
+    let m = t.match(/^(?:bx|box|barrier|draw)[:\s]*(\d{1,2})$/i);
+    if (m) { if (r.barrier == null) r.barrier = +m[1]; continue; }
+    m = t.match(/^\((\d{1,2})\)$/);
+    if (m) { if (r.barrier == null) r.barrier = +m[1]; continue; }
+
+    // Pure odds value
+    if (/^\$?\d{1,3}(?:\.\d{1,2})?$/.test(t)) {
+      const v = parseFloat(t.replace(/^\$/, ''));
+      if (v >= 1.01 && v <= 999) {
+        if (r.odds == null) r.odds = v;
+        else if (r.openOdds == null) r.openOdds = v;
+        else r.fluc.push(v);
+        continue;
+      }
+    }
+
+    // Form string (digits with optional x/L/F)
+    if (/^[\dxXLFf]{4,8}$/.test(t) && (t.match(/\d/g) || []).length >= 3) {
+      if (!r.form) r.form = t;
+      continue;
+    }
+
+    // Jockey / Driver / Trainer prefixed
+    m = t.match(/^J[:\s]+(.+)$/i);
+    if (m) { if (!r.jockey) r.jockey = m[1].trim(); continue; }
+    m = t.match(/^D[:\s]+(.+)$/i);
+    if (m) { if (!r.jockey) r.jockey = m[1].trim(); continue; }
+    m = t.match(/^T[:\s]+(.+)$/i);
+    if (m) { if (!r.trainer) r.trainer = m[1].trim(); continue; }
+
+    // Inline barrier inside fragment "Bx 3"
+    m = t.match(/(?:bx|box|barrier)[:\s]*(\d{1,2})/i);
+    if (m && r.barrier == null) r.barrier = +m[1];
+
+    // Inline odds within fragment
+    const inlineOdds = [...t.matchAll(/\$?(\d{1,3}\.\d{1,2})/g)].map(x => parseFloat(x[1]));
+    for (const v of inlineOdds) {
+      if (v >= 1.01 && v <= 999) {
+        if (r.odds == null) r.odds = v;
+        else if (r.openOdds == null) r.openOdds = v;
+        else r.fluc.push(v);
+      }
+    }
+
+    // Inline form
+    if (!r.form) {
+      const fm = t.match(/\b([\dxXLFf]{4,8})\b/);
+      if (fm && (fm[1].match(/\d/g) || []).length >= 3) r.form = fm[1];
+    }
+
+    // Treat anything reasonably long as comment
+    if (t.length >= 8 && !/^[\d.$]+$/.test(t)) {
+      const cleaned = t.replace(/(?:^|\s)(?:bx|box|barrier|draw)[:\s]*\d{1,2}/gi, '')
+                       .replace(/^\d{1,2}[.)\s]+/, '')
+                       .replace(/\bJ[:\s]+\S+(?:\s\S+)?/i, '')
+                       .replace(/\bT[:\s]+\S+(?:\s\S+)?/i, '')
+                       .replace(/\$?\d{1,3}\.\d{1,2}/g, '')
+                       .replace(/\s+/g, ' ').trim();
+      if (cleaned.length >= 8 && /[a-z]{4,}/i.test(cleaned)) {
+        r.comment = (r.comment ? r.comment + ' ' : '') + cleaned;
+      }
+    }
+  }
+}
+
+/* ---------- 2. SCORING ---------- */
+const POS_WORDS = [
+  'winner','win','strong','dominant','classy','consistent','flying','peaking','smart','sharp',
+  'genuine','progressive','top chance','knockout','firmer','firming','well placed','well drawn',
+  'in form','solid','best chance','clean','impressive','professional','value','rising',
+  'improver','specialist','trainer in form','jockey in form','suited','soft draw','peaks'
+];
+const NEG_WORDS = [
+  'drift','drifting','poor','out of form','struggling','first up','long break','spell','injury',
+  'awkward','question','doubt','steps up','class rise','unreliable','inconsistent','unplaced',
+  'beaten','flopped','tired','one paced','sour','wide barrier','wide draw','distance concern',
+  'trip query','wet concern','heavy concern','outsider'
+];
+
+function scoreRunners(runners, weights) {
+  if (!runners.length) return [];
+
+  // Base - de-vigged implied probability
+  const valid = runners.filter(r => r.odds && r.odds > 1);
+  const totalImp = valid.reduce((s, r) => s + 1 / r.odds, 0) || 1;
+  for (const r of runners) {
+    r.impliedProb = r.odds ? (1 / r.odds) / totalImp : 1 / runners.length;
+  }
+
+  return runners.map(r => {
+    const c = {};
+    c.base        = clamp(r.impliedProb * 30, 0, 10);
+    c.form        = formScore(r.form);
+    c.market      = marketMoveScore(r);
+    c.barrier     = barrierScore(r.barrier);
+    c.track       = trackScore(r);
+    c.jt          = jtScore(r);
+    c.sentiment   = sentimentScore(r.comment);
+    c.consistency = consistencyScore(r.form);
+    c.risk        = riskScore(r, c);
+
+    const total =
+      c.base * weights.base +
+      c.form * weights.form +
+      c.market * weights.market +
+      c.barrier * weights.barrier +
+      c.track * weights.track +
+      c.jt * weights.jt +
+      c.sentiment * weights.sentiment +
+      c.consistency * weights.consistency -
+      c.risk * weights.risk;
+
+    return {
+      runner: r,
+      components: c,
+      score: total,
+      explanation: buildExplanation(r, c, weights)
+    };
+  });
+}
+
+function clamp(x, lo, hi) { return Math.max(lo, Math.min(hi, x)); }
+
+function formScore(form) {
+  if (!form) return 4;
+  const tokens = form.split('').slice(-5);
+  let pts = 0, n = 0;
+  for (const t of tokens) {
+    n++;
+    if (t === '1') pts += 10;
+    else if (t === '2') pts += 7.5;
+    else if (t === '3') pts += 5.5;
+    else if (t === '4') pts += 4;
+    else if (t === '5') pts += 2.5;
+    else if (/[6-9]/.test(t)) pts += 1.5;
+    else pts += 0;
+  }
+  return n ? clamp(pts / n, 0, 10) : 4;
+}
+
+function marketMoveScore(r) {
+  if (!r.odds || !r.openOdds) return 5;
+  const pct = (r.openOdds - r.odds) / r.openOdds; // positive = firming
+  return clamp(5 + pct * 12.5, 0, 10);
+}
+
+function barrierScore(b) {
+  if (b == null) return 5;
+  if (b <= 4) return 8;
+  if (b <= 7) return 6.5;
+  if (b <= 10) return 5;
+  if (b <= 13) return 3.5;
+  return 2;
+}
+
+function trackScore(r) {
+  const c = (r.comment || '').toLowerCase();
+  let s = 5;
+  if (/(distance suit|distance specialist|trip suit|won at distance|won here|specialist here|loves the track)/.test(c)) s += 1.8;
+  if (/(track suit|loves the track|good track form|unbeaten here)/.test(c)) s += 1.0;
+  if (/(distance concern|trip query|wet concern|heavy concern|first up|fresh|resuming)/.test(c)) s -= 1.5;
+  return clamp(s, 0, 10);
+}
+
+function jtScore(r) {
+  const c = (r.comment || '').toLowerCase();
+  let s = 5;
+  if (r.jockey) s += 0.5;
+  if (r.trainer) s += 0.5;
+  if (/(trainer in form|stable in form|hot stable|premier stable)/.test(c)) s += 1.5;
+  if (/(jockey in form|leading rider|gun jockey|premier jockey)/.test(c)) s += 1.5;
+  if (/(apprentice|claim)/.test(c)) s += 0.3;
+  if (/(cold stable|out of form trainer)/.test(c)) s -= 1.5;
+  return clamp(s, 0, 10);
+}
+
+function sentimentScore(comment) {
+  if (!comment) return 5;
+  const c = comment.toLowerCase();
+  let pos = 0, neg = 0;
+  for (const w of POS_WORDS) if (c.includes(w)) pos++;
+  for (const w of NEG_WORDS) if (c.includes(w)) neg++;
+  return clamp(5 + (pos - neg) * 1.0, 0, 10);
+}
+
+function consistencyScore(form) {
+  if (!form || form.length < 3) return 5;
+  const vals = form.split('').map(t => {
+    if (t === '1') return 1;
+    if (t === '2') return 2;
+    if (t === '3') return 3;
+    if (t === '4') return 4;
+    if (t === '5') return 5;
+    if (/[6-9]/.test(t)) return 8;
+    return 10;
+  });
+  const mean = vals.reduce((a, b) => a + b, 0) / vals.length;
+  const variance = vals.reduce((a, b) => a + (b - mean) * (b - mean), 0) / vals.length;
+  const std = Math.sqrt(variance);
+  return clamp(10 - std * 1.6, 0, 10);
+}
+
+function riskScore(r, c) {
+  let risk = 0;
+  if (c.form < 4) risk += 2.5;
+  if (c.market < 4) risk += 2;
+  if (r.barrier && r.barrier >= 11) risk += 1.5;
+  if (c.consistency < 4) risk += 1.5;
+  if (c.sentiment < 4) risk += 1;
+  if (r.odds && r.odds > 30) risk += 1;
+  return clamp(risk, 0, 10);
+}
+
+function buildExplanation(r, c, w) {
+  const lines = [];
+  lines.push(`<strong>Win odds</strong> ${r.odds || 'n/a'} -> implied ${(r.impliedProb * 100).toFixed(1)}% (base rating ${c.base.toFixed(1)})`);
+  lines.push(`<strong>Form</strong> "${r.form || 'n/a'}" -> form ${c.form.toFixed(1)}, consistency ${c.consistency.toFixed(1)}`);
+  if (r.openOdds) {
+    const dir = c.market < 4.5 ? 'drifting' : c.market > 5.5 ? 'firming' : 'stable';
+    lines.push(`<strong>Market</strong> ${r.openOdds} -> ${r.odds} (${dir}, rating ${c.market.toFixed(1)})`);
+  } else {
+    lines.push(`<strong>Market</strong> no open odds available -> neutral ${c.market.toFixed(1)}`);
+  }
+  lines.push(`<strong>Barrier</strong> ${r.barrier ?? 'n/a'} -> rating ${c.barrier.toFixed(1)}`);
+  lines.push(`<strong>Track / dist fit</strong> ${c.track.toFixed(1)} | <strong>Jockey/Trainer</strong> ${c.jt.toFixed(1)}`);
+  lines.push(`<strong>Comment sentiment</strong> ${c.sentiment.toFixed(1)} from comment "${(r.comment || '').slice(0, 80)}${(r.comment || '').length > 80 ? '...' : ''}"`);
+  lines.push(`<strong>Risk penalty</strong> ${c.risk.toFixed(1)} (subtracted)`);
+  return lines;
+}
+
+/* ---------- 3. SIMULATION ---------- */
+function softmax(scores, temperature) {
+  const t = Math.max(0.01, temperature);
+  const max = Math.max(...scores);
+  const exps = scores.map(s => Math.exp((s - max) / t));
+  const sum = exps.reduce((a, b) => a + b, 0) || 1;
+  return exps.map(e => e / sum);
+}
+
+function simulate(scoredRunners, opts) {
+  const n = opts.n || 2000;
+  const mode = opts.mode || 'normal';
+  let temperature = opts.temperature || 1.0;
+  if (mode === 'wet') temperature = Math.max(temperature, 1.5);
+  if (mode === 'upset') temperature = Math.max(temperature, 2.0);
+
+  const scores = scoredRunners.map(s => s.score);
+  let probs = softmax(scores, temperature);
+  if (mode === 'upset') {
+    probs = probs.map(p => p * 0.6 + 0.4 / scoredRunners.length);
+  } else if (mode === 'wet') {
+    probs = probs.map(p => p * 0.8 + 0.2 / scoredRunners.length);
+  }
+  const psum = probs.reduce((a, b) => a + b, 0) || 1;
+  probs = probs.map(p => p / psum);
+
+  const positions = scoredRunners.map(() => ({ p1: 0, p2: 0, p3: 0, p4: 0 }));
+
+  for (let trial = 0; trial < n; trial++) {
+    const remaining = scoredRunners.map((_, i) => ({ i, w: probs[i] }));
+    for (let pos = 0; pos < 4 && remaining.length; pos++) {
+      const total = remaining.reduce((s, x) => s + x.w, 0);
+      if (total <= 0) break;
+      let r = Math.random() * total;
+      let chosen = remaining.length - 1;
+      for (let k = 0; k < remaining.length; k++) {
+        r -= remaining[k].w;
+        if (r <= 0) { chosen = k; break; }
+      }
+      const idx = remaining[chosen].i;
+      if (pos === 0) positions[idx].p1++;
+      if (pos <= 1) positions[idx].p2++;
+      if (pos <= 2) positions[idx].p3++;
+      if (pos <= 3) positions[idx].p4++;
+      remaining.splice(chosen, 1);
+    }
+  }
+
+  return positions.map((p, i) => ({
+    runner: scoredRunners[i].runner,
+    score: scoredRunners[i].score,
+    components: scoredRunners[i].components,
+    explanation: scoredRunners[i].explanation,
+    p1: p.p1 / n, p2: p.p2 / n, p3: p.p3 / n, p4: p.p4 / n,
+    impliedProb: scoredRunners[i].runner.impliedProb,
+    expFinish: 1 * (p.p1 / n) + 2 * ((p.p2 - p.p1) / n) + 3 * ((p.p3 - p.p2) / n) +
+               4 * ((p.p4 - p.p3) / n) + 5 * (1 - p.p4 / n)
+  }));
+}
+
+/* ---------- 4. PICKS ---------- */
+function generatePicks(simResults) {
+  const byWin = [...simResults].sort((a, b) => b.p1 - a.p1);
+  const byPlace = [...simResults].sort((a, b) => b.p3 - a.p3);
+  const byScore = [...simResults].sort((a, b) => b.score - a.score);
+
+  const conservative = [...simResults]
+    .map(r => ({ ...r, conservScore: r.p3 * 1.0 - r.components.risk * 0.04 }))
+    .sort((a, b) => b.conservScore - a.conservScore)
+    .slice(0, 4);
+
+  const upsetCandidates = [...simResults]
+    .filter(r => r.runner.odds && r.runner.odds >= 6)
+    .sort((a, b) => b.p4 - a.p4);
+  const upset = upsetCandidates.length >= 4 ? upsetCandidates.slice(0, 4) : byScore.slice(0, 4);
+
+  const value = [...simResults]
+    .map(r => ({ ...r, edge: r.p1 - r.impliedProb }))
+    .sort((a, b) => b.edge - a.edge)[0];
+
+  const lay = [...simResults]
+    .map(r => ({ ...r, edge: r.impliedProb - r.p1 }))
+    .sort((a, b) => b.edge - a.edge)[0];
+
+  const bestWin = byWin
+    .map(r => ({ ...r, ev: ((r.runner.odds || 0) * r.p1) - 1 }))
+    .sort((a, b) => b.ev - a.ev)[0];
+
+  const bestPlace = byPlace
+    .map(r => {
+      const placeOdds = r.runner.placeOdds || (r.runner.odds ? Math.max(1.05, 1 + (r.runner.odds - 1) / 4) : 0);
+      return { ...r, placeOdds, placeEV: placeOdds * r.p3 - 1 };
+    })
+    .sort((a, b) => b.placeEV - a.placeEV)[0];
+
+  const exacta = byWin.slice(0, 2).map(r => r.runner.num);
+  const trifecta = byWin.slice(0, 3).map(r => r.runner.num);
+  const first4 = byWin.slice(0, 4).map(r => r.runner.num);
+
+  return {
+    main: byWin.slice(0, 4),
+    conservative, upset, value, lay,
+    bestWin, bestPlace,
+    exacta, trifecta, first4
+  };
+}
+
+/* ---------- 5. RENDER ---------- */
+function renderRaceMeta(race, runners) {
+  const el = document.getElementById('raceMeta');
+  if (!race || (!race.raceNo && !race.distance && !race.track)) {
+    el.innerHTML = `<div class="race-meta"><div class="item"><small>Runners</small><strong>${runners.length}</strong></div></div>`;
+    return;
+  }
+  el.innerHTML = `<div class="race-meta">
+    ${race.raceNo ? `<div class="item"><small>Race</small><strong>${escapeHtml(race.raceNo)}</strong></div>` : ''}
+    ${race.track ? `<div class="item"><small>Track</small><strong>${escapeHtml(race.track)}</strong></div>` : ''}
+    ${race.distance ? `<div class="item"><small>Distance</small><strong>${escapeHtml(race.distance)}</strong></div>` : ''}
+    ${race.condition ? `<div class="item"><small>Conditions</small><strong>${escapeHtml(race.condition)}</strong></div>` : ''}
+    <div class="item"><small>Runners</small><strong>${runners.length}</strong></div>
+  </div>`;
+}
+
+function renderRunners(runners) {
+  const el = document.getElementById('runnersTable');
+  if (!runners.length) {
+    el.innerHTML = '<div class="empty">No runners parsed. Try a different format or click <strong>Load sample</strong>.</div>';
+    return;
+  }
+  let html = `<table><thead><tr>
+    <th>#</th><th>Runner</th><th>Bx</th><th>Odds</th><th>Open</th><th>Form</th>
+    <th>Jockey</th><th>Trainer</th><th>Comment</th>
+  </tr></thead><tbody>`;
+  for (const r of runners) {
+    html += `<tr>
+      <td><span class="runner-num">${r.num}</span></td>
+      <td><strong>${escapeHtml(r.name)}</strong></td>
+      <td class="center">${r.barrier ?? '-'}</td>
+      <td>${r.odds ? '$' + r.odds.toFixed(2) : '-'}</td>
+      <td>${r.openOdds ? '$' + r.openOdds.toFixed(2) : '-'}</td>
+      <td><code>${escapeHtml(r.form || '-')}</code></td>
+      <td>${escapeHtml(r.jockey || '-')}</td>
+      <td>${escapeHtml(r.trainer || '-')}</td>
+      <td class="muted" style="max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(r.comment || '')}">${escapeHtml(r.comment || '')}</td>
+    </tr>`;
+  }
+  html += '</tbody></table>';
+  el.innerHTML = html;
+}
+
+function renderRankings(scored) {
+  const el = document.getElementById('rankingsTable');
+  const sorted = [...scored].sort((a, b) => b.score - a.score);
+  let html = `<table><thead><tr>
+    <th>Rank</th><th>#</th><th>Runner</th><th>Score</th>
+    <th>Base</th><th>Form</th><th>Mkt</th><th>Bx</th><th>Trk</th>
+    <th>J/T</th><th>Snt</th><th>Cns</th><th>Risk</th>
+  </tr></thead><tbody>`;
+  let i = 1;
+  for (const s of sorted) {
+    const c = s.components;
+    html += `<tr>
+      <td><strong>${i}</strong></td>
+      <td><span class="runner-num">${s.runner.num}</span></td>
+      <td><strong>${escapeHtml(s.runner.name)}</strong></td>
+      <td><strong class="success-text">${s.score.toFixed(2)}</strong>${barCell(s.score, 10)}</td>
+      <td>${c.base.toFixed(1)}</td>
+      <td>${c.form.toFixed(1)}</td>
+      <td class="${c.market < 4 ? 'danger-text' : c.market > 6 ? 'success-text' : ''}">${c.market.toFixed(1)}</td>
+      <td>${c.barrier.toFixed(1)}</td>
+      <td>${c.track.toFixed(1)}</td>
+      <td>${c.jt.toFixed(1)}</td>
+      <td>${c.sentiment.toFixed(1)}</td>
+      <td>${c.consistency.toFixed(1)}</td>
+      <td class="${c.risk > 5 ? 'danger-text' : c.risk > 3 ? 'warn-text' : ''}">${c.risk.toFixed(1)}</td>
+    </tr>`;
+    i++;
+  }
+  html += '</tbody></table>';
+  el.innerHTML = html;
+  document.getElementById('rankingsSection').style.display = '';
+}
+
+function barCell(v, max) {
+  const pct = clamp(v / max * 100, 0, 100);
+  return `<div class="bar-bg"><div class="bar" style="width:${pct}%;"></div></div>`;
+}
+
+function renderPicks(picks) {
+  const top = document.getElementById('topPicks');
+  top.innerHTML = picks.main.map((p, i) => `
+    <div class="pick-card">
+      <h3><span class="position-badge pos-${i + 1}">${i + 1}</span> &nbsp; #${p.runner.num}</h3>
+      <div class="runner-name">${escapeHtml(p.runner.name)}</div>
+      <div style="margin-top:6px;">
+        <span class="tag green">Win ${(p.p1 * 100).toFixed(1)}%</span>
+        <span class="tag blue">Top3 ${(p.p3 * 100).toFixed(1)}%</span>
+      </div>
+      <div class="reason">Score ${p.score.toFixed(2)} &middot; Odds ${p.runner.odds ? '$' + p.runner.odds.toFixed(2) : '-'}</div>
+    </div>
+  `).join('');
+
+  document.getElementById('conservativeTop').innerHTML = renderRunnerList(picks.conservative,
+    r => `Top3 ${(r.p3 * 100).toFixed(1)}% &middot; risk ${r.components.risk.toFixed(1)}`);
+  document.getElementById('upsetTop').innerHTML = renderRunnerList(picks.upset,
+    r => `Top4 ${(r.p4 * 100).toFixed(1)}% &middot; ${r.runner.odds ? '$' + r.runner.odds.toFixed(2) : '-'}`);
+
+  const v = picks.value, l = picks.lay;
+  document.getElementById('valueLay').innerHTML = `
+    <div><span class="tag green">VALUE</span><strong>#${v.runner.num} ${escapeHtml(v.runner.name)}</strong></div>
+    <div class="reason">Sim win ${(v.p1 * 100).toFixed(1)}% vs market ${(v.impliedProb * 100).toFixed(1)}% (edge +${(v.edge * 100).toFixed(1)}%)</div>
+    <div class="divider"></div>
+    <div><span class="tag red">LAY</span><strong>#${l.runner.num} ${escapeHtml(l.runner.name)}</strong></div>
+    <div class="reason">Market ${(l.impliedProb * 100).toFixed(1)}% vs sim ${(l.p1 * 100).toFixed(1)}% (over ${(l.edge * 100).toFixed(1)}%)</div>
+  `;
+
+  const bw = picks.bestWin;
+  document.getElementById('bestWin').innerHTML = `
+    <div class="runner-name">#${bw.runner.num} ${escapeHtml(bw.runner.name)}</div>
+    <div class="reason">Win ${(bw.p1 * 100).toFixed(1)}% @ ${bw.runner.odds ? '$' + bw.runner.odds.toFixed(2) : '-'} &middot; EV ${(bw.ev * 100).toFixed(1)}%</div>
+  `;
+  const bp = picks.bestPlace;
+  document.getElementById('bestPlace').innerHTML = `
+    <div class="runner-name">#${bp.runner.num} ${escapeHtml(bp.runner.name)}</div>
+    <div class="reason">Top3 ${(bp.p3 * 100).toFixed(1)}% @ $${bp.placeOdds.toFixed(2)} place &middot; EV ${(bp.placeEV * 100).toFixed(1)}%</div>
+  `;
+  document.getElementById('exotics').innerHTML = `
+    <div><span class="tag blue">EXACTA</span> ${picks.exacta.join(' &rarr; ')}</div>
+    <div style="margin-top:6px;"><span class="tag blue">TRIFECTA</span> ${picks.trifecta.join(' &rarr; ')}</div>
+    <div style="margin-top:6px;"><span class="tag blue">FIRST 4</span> ${picks.first4.join(' &rarr; ')}</div>
+  `;
+  document.getElementById('picksSection').style.display = '';
+}
+
+function renderRunnerList(arr, subFn) {
+  return arr.map((r, i) => `
+    <div class="kvp" style="margin-bottom:6px;">
+      <span><span class="position-badge pos-${i + 1}">${i + 1}</span> &nbsp; <strong>#${r.runner.num} ${escapeHtml(r.runner.name)}</strong></span>
+      <span class="muted" style="font-size:11px;">${subFn(r)}</span>
+    </div>
+  `).join('');
+}
+
+function renderSimTable(sims, simInfo) {
+  document.getElementById('simSummary').textContent = simInfo;
+  const sorted = [...sims].sort((a, b) => b.p1 - a.p1);
+  let html = `<table><thead><tr>
+    <th>#</th><th>Runner</th><th>Score</th>
+    <th>Win %</th><th>Top 2 %</th><th>Top 3 %</th><th>Top 4 %</th>
+    <th>Sim odds</th><th>Mkt odds</th><th>Edge</th>
+  </tr></thead><tbody>`;
+  for (const s of sorted) {
+    const simOdds = s.p1 > 0 ? (1 / s.p1).toFixed(2) : '-';
+    const mktOdds = s.runner.odds ? s.runner.odds.toFixed(2) : '-';
+    const edge = (s.p1 - s.impliedProb) * 100;
+    html += `<tr>
+      <td><span class="runner-num">${s.runner.num}</span></td>
+      <td><strong>${escapeHtml(s.runner.name)}</strong></td>
+      <td>${s.score.toFixed(2)}</td>
+      <td><strong>${(s.p1 * 100).toFixed(1)}%</strong>${barCell(s.p1 * 100, 100)}</td>
+      <td>${(s.p2 * 100).toFixed(1)}%</td>
+      <td>${(s.p3 * 100).toFixed(1)}%</td>
+      <td>${(s.p4 * 100).toFixed(1)}%</td>
+      <td>$${simOdds}</td>
+      <td>$${mktOdds}</td>
+      <td class="${edge > 1 ? 'success-text' : edge < -1 ? 'danger-text' : ''}">${edge >= 0 ? '+' : ''}${edge.toFixed(1)}%</td>
+    </tr>`;
+  }
+  html += '</tbody></table>';
+  document.getElementById('simTable').innerHTML = html;
+  document.getElementById('simSection').style.display = '';
+}
+
+function renderExplanations(scored) {
+  const sorted = [...scored].sort((a, b) => b.score - a.score);
+  let html = '';
+  for (const s of sorted) {
+    html += `<details ${s === sorted[0] ? 'open' : ''}>
+      <summary>#${s.runner.num} ${escapeHtml(s.runner.name)} &mdash; score ${s.score.toFixed(2)}</summary>
+      <ul class="explanation-list">
+        ${s.explanation.map(line => `<li>${line}</li>`).join('')}
+      </ul>
+    </details>`;
+  }
+  document.getElementById('explanations').innerHTML = html;
+  document.getElementById('explSection').style.display = '';
+}
+
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+/* ---------- 6. CONTROLLER ---------- */
+const STATE = { runners: [], race: {}, scored: [], sims: [], picks: null, simInfo: '' };
+
+function getWeights() {
+  const w = {};
+  for (const k of Object.keys(DEFAULT_WEIGHTS)) {
+    const el = document.getElementById('w_' + k);
+    w[k] = el ? parseFloat(el.value) : DEFAULT_WEIGHTS[k];
+  }
+  return w;
+}
+
+function buildSliders() {
+  const wrap = document.getElementById('weightSliders');
+  wrap.innerHTML = '';
+  for (const k of Object.keys(DEFAULT_WEIGHTS)) {
+    const id = 'w_' + k;
+    wrap.insertAdjacentHTML('beforeend', `
+      <div class="slider">
+        <label>${WEIGHT_LABELS[k]} <span class="val" id="${id}_v">${DEFAULT_WEIGHTS[k].toFixed(2)}</span></label>
+        <input type="range" id="${id}" min="0" max="0.4" step="0.01" value="${DEFAULT_WEIGHTS[k]}">
+      </div>
+    `);
+  }
+  for (const k of Object.keys(DEFAULT_WEIGHTS)) {
+    document.getElementById('w_' + k).addEventListener('input', e => {
+      document.getElementById('w_' + k + '_v').textContent = parseFloat(e.target.value).toFixed(2);
+    });
+  }
+}
+
+function ensureParsed() {
+  if (!STATE.runners.length) {
+    const txt = document.getElementById('inputText').value;
+    const { runners, race } = parseSportsbet(txt);
+    STATE.runners = runners;
+    STATE.race = race;
+    renderRaceMeta(race, runners);
+    renderRunners(runners);
+    document.getElementById('parseInfo').textContent = `${runners.length} runner(s) parsed`;
+  }
+  return STATE.runners.length > 0;
+}
+
+function ensureScored() {
+  if (!STATE.scored.length) {
+    if (!ensureParsed()) return false;
+    STATE.scored = scoreRunners(STATE.runners, getWeights());
+    renderRankings(STATE.scored);
+    renderExplanations(STATE.scored);
+  }
+  return true;
+}
+
+function attachEvents() {
+  document.getElementById('btnParse').addEventListener('click', () => {
+    const txt = document.getElementById('inputText').value;
+    const { runners, race } = parseSportsbet(txt);
+    STATE.runners = runners;
+    STATE.race = race;
+    STATE.scored = []; STATE.sims = []; STATE.picks = null;
+    document.getElementById('parseInfo').textContent = `${runners.length} runner(s) parsed`;
+    renderRaceMeta(race, runners);
+    renderRunners(runners);
+    // hide downstream sections until predict is run
+    document.getElementById('rankingsSection').style.display = 'none';
+    document.getElementById('picksSection').style.display = 'none';
+    document.getElementById('simSection').style.display = 'none';
+    document.getElementById('explSection').style.display = 'none';
+  });
+
+  document.getElementById('btnPredict').addEventListener('click', () => {
+    if (!ensureParsed()) { alert('Parse some runners first.'); return; }
+    STATE.scored = scoreRunners(STATE.runners, getWeights());
+    STATE.sims = []; STATE.picks = null;
+    renderRankings(STATE.scored);
+    renderExplanations(STATE.scored);
+  });
+
+  document.getElementById('btnSimulate').addEventListener('click', () => {
+    if (!ensureScored()) { alert('Parse some runners first.'); return; }
+    const mode = document.getElementById('mode').value;
+    const temperature = parseFloat(document.getElementById('temperature').value);
+    const n = parseInt(document.getElementById('simCount').value, 10);
+    STATE.sims = simulate(STATE.scored, { mode, temperature, n });
+    const upsetSim = simulate(STATE.scored, {
+      mode: 'upset',
+      temperature: Math.max(temperature, 2.0),
+      n: Math.max(1000, Math.floor(n / 2))
+    });
+    STATE.picks = generatePicks(STATE.sims);
+    STATE.picks.upset = [...upsetSim].sort((a, b) => b.p4 - a.p4).slice(0, 4);
+    STATE.simInfo = `${n.toLocaleString()} simulations &middot; mode: <strong>${mode}</strong> &middot; temperature: ${temperature.toFixed(1)}`;
+    document.getElementById('simSummary').innerHTML = STATE.simInfo;
+    renderPicks(STATE.picks);
+    renderSimTable(STATE.sims, '');
+    document.getElementById('simSummary').innerHTML = STATE.simInfo;
+  });
+
+  document.getElementById('mode').addEventListener('change', e => {
+    document.getElementById('modeLabel').textContent = e.target.options[e.target.selectedIndex].text;
+  });
+  document.getElementById('temperature').addEventListener('input', e => {
+    document.getElementById('tempVal').textContent = parseFloat(e.target.value).toFixed(1);
+  });
+  document.getElementById('simCount').addEventListener('input', e => {
+    document.getElementById('simVal').textContent = e.target.value;
+  });
+
+  document.getElementById('btnSample').addEventListener('click', () => {
+    document.getElementById('inputText').value = SAMPLE_DATA;
+    document.getElementById('parseInfo').textContent = 'Sample loaded - press Parse';
+  });
+
+  document.getElementById('btnExport').addEventListener('click', exportResults);
+}
+
+function exportResults() {
+  if (!STATE.sims.length || !STATE.picks) {
+    alert('Run a simulation first.');
+    return;
+  }
+  const lines = [];
+  lines.push('RACE ENGINE - prediction export');
+  lines.push('Generated: ' + new Date().toISOString());
+  if (STATE.race.raceNo || STATE.race.distance || STATE.race.track) {
+    lines.push(`Race ${STATE.race.raceNo || ''} ${STATE.race.track || ''} ${STATE.race.distance || ''} ${STATE.race.condition || ''}`.trim());
+  }
+  lines.push('');
+  lines.push('=== Main predicted top 4 ===');
+  STATE.picks.main.forEach((p, i) => lines.push(
+    `${i + 1}. #${p.runner.num} ${p.runner.name}  | win ${(p.p1 * 100).toFixed(1)}% | top3 ${(p.p3 * 100).toFixed(1)}% | score ${p.score.toFixed(2)}`));
+  lines.push('');
+  lines.push('=== Conservative top 4 ===');
+  STATE.picks.conservative.forEach((p, i) => lines.push(
+    `${i + 1}. #${p.runner.num} ${p.runner.name}  | top3 ${(p.p3 * 100).toFixed(1)}% | risk ${p.components.risk.toFixed(1)}`));
+  lines.push('');
+  lines.push('=== Upset top 4 ===');
+  STATE.picks.upset.forEach((p, i) => lines.push(
+    `${i + 1}. #${p.runner.num} ${p.runner.name}  | top4 ${(p.p4 * 100).toFixed(1)}% | $${(p.runner.odds || 0).toFixed(2)}`));
+  lines.push('');
+  lines.push(`Value runner: #${STATE.picks.value.runner.num} ${STATE.picks.value.runner.name}  edge +${(STATE.picks.value.edge * 100).toFixed(1)}%`);
+  lines.push(`Lay runner:   #${STATE.picks.lay.runner.num} ${STATE.picks.lay.runner.name}  over ${(STATE.picks.lay.edge * 100).toFixed(1)}%`);
+  lines.push(`Best win:     #${STATE.picks.bestWin.runner.num} ${STATE.picks.bestWin.runner.name}  EV ${(STATE.picks.bestWin.ev * 100).toFixed(1)}%`);
+  lines.push(`Best place:   #${STATE.picks.bestPlace.runner.num} ${STATE.picks.bestPlace.runner.name}  EV ${(STATE.picks.bestPlace.placeEV * 100).toFixed(1)}%`);
+  lines.push(`Exacta:   ${STATE.picks.exacta.join(' -> ')}`);
+  lines.push(`Trifecta: ${STATE.picks.trifecta.join(' -> ')}`);
+  lines.push(`First 4:  ${STATE.picks.first4.join(' -> ')}`);
+  lines.push('');
+  lines.push('=== Simulation distribution ===');
+  const sorted = [...STATE.sims].sort((a, b) => b.p1 - a.p1);
+  for (const s of sorted) {
+    lines.push(`#${String(s.runner.num).padStart(2)} ${s.runner.name.padEnd(24)} score ${s.score.toFixed(2).padStart(5)} | win ${(s.p1 * 100).toFixed(1).padStart(4)}%  top2 ${(s.p2 * 100).toFixed(1).padStart(4)}%  top3 ${(s.p3 * 100).toFixed(1).padStart(4)}%  top4 ${(s.p4 * 100).toFixed(1).padStart(4)}%`);
+  }
+  const text = lines.join('\n');
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(() => {
+      alert('Results copied to clipboard.');
+    }, () => downloadText(text));
+  } else {
+    downloadText(text);
+  }
+}
+
+function downloadText(text) {
+  const blob = new Blob([text], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'race-engine-export.txt';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 100);
+}
+
+const SAMPLE_DATA = `Race 5 at Flemington 1400m Soft 5
+1. Storm Caller   | Bx 3  | 3.20  | 4.50  | 12132 | J: J. Allen   | T: C. Waller     | Strong recent form, firming late, distance suit
+2. Quiet Genius   | Bx 1  | 5.50  | 6.50  | 31245 | J: D. Lane    | T: C. Maher      | Consistent placer, well drawn, jockey in form
+3. Lightning Lad  | Bx 8  | 12.00 | 8.00  | 4F235 | J: B. Shinn   | T: M. Ellerton   | Drifting in market, trip query, awkward draw
+4. Velvet Hammer  | Bx 5  | 3.80  | 4.20  | 21134 | J: H. Coffey  | T: G. Waterhouse | Top chance peaking nicely solid place rate
+5. Dust Riser     | Bx 11 | 26.00 | 21.00 | 8x657 | J: M. Dee     | T: P. Snowden    | Wide barrier out of form drifting
+6. Echo Bay       | Bx 2  | 5.00  | 7.50  | 23512 | J: J. McNeil  | T: A. Freedman   | Firming hard won here last start sharp
+7. Royal Cinder   | Bx 12 | 51.00 | 41.00 | 0F876 | J: T. Berry   | T: J. Pride      | Long break drifting outsider
+8. Glasshouse     | Bx 6  | 9.00  | 11.00 | 31423 | J: J. Bowman  | T: J. Cummings   | Classy improver well placed smart`;
+
+/* ---------- 7. INIT ---------- */
+buildSliders();
+attachEvents();
+</script>
+</body>
+</html>
