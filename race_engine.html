@@ -1,0 +1,1248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Race Engine — Betting Picks</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0d1015;--bg2:#171b24;--bg3:#1f2533;--bg4:#2a3142;
+  --bd:#2c3346;--bd2:#3a4360;
+  --tx:#e8ecf4;--tx2:#9aa5c0;--tx3:#5f6985;
+  --gold:#f5c842;--green:#22c55e;--red:#ef4444;--blue:#3b82f6;--purple:#a855f7;
+  --r:8px;--r2:12px;
+  --font:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+}
+body{background:var(--bg);color:var(--tx);font-family:var(--font);font-size:14px;line-height:1.5;padding:16px}
+.app{max-width:980px;margin:0 auto}
+h1{font-size:20px;font-weight:700;margin-bottom:4px}
+h2{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--tx3);margin:20px 0 10px;font-weight:600}
+.sub{color:var(--tx3);font-size:12px;margin-bottom:20px}
+.card{background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r2);padding:14px;margin-bottom:12px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+.row.tight{margin-bottom:6px}
+label{font-size:11px;color:var(--tx3);text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:4px}
+select,input,textarea,button{font-family:var(--font);font-size:13px;border-radius:var(--r);outline:none}
+select,input{padding:7px 10px;background:var(--bg3);color:var(--tx);border:1px solid var(--bd)}
+select:focus,input:focus{border-color:var(--blue)}
+textarea{width:100%;padding:10px;background:var(--bg3);color:var(--tx);border:1px solid var(--bd);font-family:ui-monospace,Menlo,monospace;font-size:12px;resize:vertical;line-height:1.5}
+textarea:focus{border-color:var(--blue)}
+button{padding:8px 14px;border:1px solid var(--bd2);background:var(--bg3);color:var(--tx);cursor:pointer;font-weight:500}
+button:hover{background:var(--bg4)}
+button.primary{background:linear-gradient(135deg,#4f8ef7,#1d4ed8);border:none;color:#fff;font-weight:600;padding:9px 18px}
+button.primary:hover{opacity:.92}
+button.ghost{background:transparent;color:var(--tx2)}
+button.danger{color:var(--red);border-color:rgba(239,68,68,.3)}
+.flex{display:flex;gap:8px;align-items:center}
+.muted{color:var(--tx3);font-size:12px}
+.tag{display:inline-block;padding:2px 7px;border-radius:6px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em}
+.tag.ok{background:rgba(34,197,94,.15);color:var(--green);border:1px solid rgba(34,197,94,.3)}
+.tag.warn{background:rgba(245,200,66,.15);color:var(--gold);border:1px solid rgba(245,200,66,.3)}
+.tag.err{background:rgba(239,68,68,.15);color:var(--red);border:1px solid rgba(239,68,68,.3)}
+.tag.info{background:rgba(59,130,246,.15);color:var(--blue);border:1px solid rgba(59,130,246,.3)}
+.tag.tip{background:rgba(168,85,247,.2);color:var(--purple);border:1px solid rgba(168,85,247,.4)}
+#status{padding:10px 14px;margin-bottom:12px;border-radius:var(--r);font-size:13px;display:none}
+#status.show{display:block}
+#status.ok{background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.3);color:var(--green)}
+#status.err{background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.3);color:var(--red)}
+#status.info{background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.3);color:#93bbf9}
+
+.picks{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin-bottom:14px}
+.pick{background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r2);padding:14px}
+.pick.gold{border-color:rgba(245,200,66,.4);background:rgba(245,200,66,.04)}
+.pick.blue{border-color:rgba(59,130,246,.4);background:rgba(59,130,246,.04)}
+.pick.green{border-color:rgba(34,197,94,.4);background:rgba(34,197,94,.04)}
+.pick-lbl{font-size:10px;color:var(--tx3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px}
+.pick-val{font-size:22px;font-weight:700;line-height:1.2}
+.pick.gold .pick-val{color:var(--gold)}
+.pick-sub{font-size:11px;color:var(--tx2);margin-top:4px}
+.pick-detail{font-size:12px;color:var(--tx2);margin-top:6px}
+table{width:100%;border-collapse:collapse;font-size:13px;background:var(--bg2);border-radius:var(--r2);overflow:hidden;border:1px solid var(--bd)}
+th{text-align:left;padding:8px 10px;font-size:10px;color:var(--tx3);text-transform:uppercase;letter-spacing:.06em;background:var(--bg3);font-weight:600;border-bottom:1px solid var(--bd)}
+td{padding:8px 10px;border-bottom:1px solid var(--bd);vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr.top1{background:rgba(245,200,66,.06)}
+tr.top2{background:rgba(59,130,246,.05)}
+tr.top3{background:rgba(168,85,247,.04)}
+tr.scratched td{color:var(--tx3);text-decoration:line-through;opacity:.5}
+.rk{display:inline-flex;width:22px;height:22px;border-radius:50%;background:var(--bg4);color:var(--tx);font-size:11px;font-weight:700;align-items:center;justify-content:center}
+.rk.g{background:var(--gold);color:#1a1a1a}
+.rk.b{background:var(--blue);color:#fff}
+.rk.p{background:var(--purple);color:#fff}
+.bar{display:inline-block;height:6px;border-radius:3px;background:var(--bg4);width:80px;vertical-align:middle;margin-right:6px;overflow:hidden}
+.bar > i{display:block;height:100%;background:linear-gradient(90deg,#4f8ef7,#22c55e)}
+.bar.gold > i{background:linear-gradient(90deg,var(--gold),#d4a80a)}
+.ov-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:6px;margin-top:8px}
+.ov-row{display:grid;grid-template-columns:30px 1fr 70px 60px;gap:4px;align-items:center;padding:4px;background:var(--bg3);border-radius:var(--r);font-size:12px}
+.ov-row input{padding:4px 6px;font-size:12px;background:var(--bg2)}
+.ov-row .ov-name{color:var(--tx);font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ov-row .ov-num{color:var(--tx3);font-size:11px}
+#tests{font-family:ui-monospace,monospace;font-size:12px;background:var(--bg2);padding:10px;border-radius:var(--r);border:1px solid var(--bd);margin-top:10px;display:none;white-space:pre-wrap;max-height:300px;overflow-y:auto}
+#tests.show{display:block}
+.test-line{padding:2px 0}
+.test-pass{color:var(--green)}
+.test-fail{color:var(--red);font-weight:600}
+.spinner{display:inline-block;width:12px;height:12px;border:2px solid var(--bd);border-top-color:var(--blue);border-radius:50%;animation:spin .8s linear infinite;vertical-align:middle;margin-right:6px}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (max-width:600px){
+  body{padding:10px}
+  .picks{grid-template-columns:1fr 1fr}
+  th,td{padding:6px 5px;font-size:12px}
+  .ov-row{grid-template-columns:24px 1fr 56px 50px}
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+<h1>Race Engine</h1>
+<div class="sub">Betting picks from Sportsbet race text. Greyhound + horse. Plackett-Luce Monte Carlo for accurate top-3 and first-4 probabilities.</div>
+
+<div id="status"></div>
+
+<div class="card">
+  <div class="row tight">
+    <div style="flex:1;min-width:140px">
+      <label>Sport</label>
+      <select id="sport">
+        <option value="auto" selected>Auto-detect</option>
+        <option value="greyhound">Greyhound</option>
+        <option value="horse">Thoroughbred</option>
+      </select>
+    </div>
+    <div style="flex:1;min-width:140px">
+      <label>Market liquidity</label>
+      <select id="liq">
+        <option value="low" selected>Low (regional/late)</option>
+        <option value="high">High (metro/peak)</option>
+      </select>
+    </div>
+    <div style="flex:1;min-width:140px">
+      <label>Engine mode</label>
+      <select id="mode">
+        <option value="accurate" selected>Accurate (Monte Carlo)</option>
+        <option value="fast">Fast (deterministic)</option>
+      </select>
+    </div>
+  </div>
+  <label>Paste race text from Sportsbet</label>
+  <textarea id="paste" rows="10" placeholder="Paste the entire race card here. The parser ignores any 'Final Results' / dividend section and extracts runners from the Race Card. Anything missed can be fixed in Overrides below."></textarea>
+  <div class="row" style="margin-top:10px">
+    <button class="primary" id="btnRun">Analyse Race</button>
+    <button id="btnSampleGrey">Greyhound sample</button>
+    <button id="btnSampleHorse">Horse sample</button>
+    <button id="btnSampleResults">Results-page sample</button>
+    <button class="ghost" id="btnTests">Run self-tests</button>
+    <button class="danger ghost" id="btnClear">Clear</button>
+  </div>
+  <div id="tests"></div>
+</div>
+
+<div id="results"></div>
+
+<div class="card" id="ovCard" style="display:none">
+  <h2 style="margin-top:0">Manual overrides</h2>
+  <div class="muted" style="margin-bottom:8px">Adjust any value the parser got wrong, then re-analyse. Empty fields keep the parsed value.</div>
+  <div class="flex" style="font-size:11px;color:var(--tx3);padding:0 4px 6px">
+    <div style="width:30px">#</div>
+    <div style="flex:1">Name</div>
+    <div style="width:70px">Win odds</div>
+    <div style="width:60px">Scratch</div>
+  </div>
+  <div id="overrides"></div>
+  <div class="row" style="margin-top:10px">
+    <button class="primary" id="btnReanalyse">Re-analyse with overrides</button>
+  </div>
+</div>
+
+
+<script>
+/* =========================================================================
+   RACE ENGINE v2 — accuracy-focused rewrite
+   Key fixes vs v1:
+   - Strips "Final Results" / dividends section so favourite isn't double-counted
+   - Deduplicates blocks by runner number, keeping the richer block
+   - Auto-scratches "Vacant Box" / "Scratched" / "Late Scratching"
+   - Recent: aware odds extraction (long fluc lists handled correctly)
+   - Uses career win% AND place% (Bayesian shrinkage, sport-aware prior)
+   - Uses Best Time (greyhound) and barrier (greyhound short sprints)
+   - Uses Recent Starts list as a fallback when F: is missing/odd
+   - Better sport detection (Whelped, Bitch/Dog, Bio:, Sire, kg-weight)
+   - Track condition penalty for horses without proven mud form
+   - Plackett-Luce Monte Carlo with adaptive sim count
+   - Self-tests for every fix
+   ========================================================================= */
+
+const $ = id => document.getElementById(id);
+function setStatus(msg, kind){ const s=$('status'); s.className='show '+(kind||'info'); s.textContent=msg; }
+function clearStatus(){ $('status').className=''; $('status').textContent=''; }
+
+/* ---------- Section stripper ----------
+   Sportsbet results pages put dividend rows ("1st 7. Durrington Win 1.70") at the top,
+   then the race card below. The dividend rows look like runner blocks but contain
+   only 1-2 numeric values (win/place dividend), polluting odds extraction and
+   creating duplicate runners. We aggressively strip everything before "Race Card",
+   "Hide Form", or the FIRST run of >=3 numeric flucs after a runner header. */
+function stripResultsSection(raw){
+  if (!raw) return '';
+  // Hard markers Sportsbet uses to delimit the betting card
+  const markers = [/\bRace Card\b/i, /\bHide Form\b/i, /\bFlucs\s*\n+\s*Fast Form\b/i];
+  for (const re of markers){
+    const m = raw.match(re);
+    if (m){ return raw.slice(m.index + m[0].length); }
+  }
+  return raw;
+}
+
+
+/* ---------- Sport detection ----------
+   Value-aware kg check: greyhound body weight is ~22-40kg, horse handicap
+   weight is ~50-65kg. A naive /\d+\s*kg/ test misclassifies. */
+function detectSport(text){
+  const t = (text||'').toLowerCase();
+  let dog = 0, horse = 0;
+
+  // Horse cues
+  if (/expected settling position/.test(t)) horse += 6;
+  if (/\bblinkers\b|\bgear changes?\b|\bwinkers\b|\bvisors\b/.test(t)) horse += 3;
+  if (/\bjockey\b|\bapprentice\b|\brider\b/.test(t)) horse += 5;
+  if (/\b(turf|grass|heavy|soft|firm|synthetic)\s*\(?\d/.test(t)) horse += 3;
+  if (/\bhcp\b|\bhandicap\b|\bmdn\b|\bmaiden\b|\bbm\d+\b|\bgroup\s*\d\b/.test(t)) horse += 1;
+  // Value-aware weight: 50-65kg = horse handicap weight
+  const kgMatches = (text.match(/(\d{2}(?:\.\d)?)\s*kg/gi) || []);
+  for (const km of kgMatches){
+    const v = parseFloat(km);
+    if (v >= 50 && v <= 65) horse += 3;
+    else if (v >= 22 && v <= 42) dog += 3; // greyhound body weight
+  }
+
+  // Greyhound cues
+  if (/\bwhelped\b/.test(t)) dog += 5;
+  if (/\bsire\b/.test(t) && /\bdam\b/.test(t)) dog += 4;
+  if (/\b(bitch|dog)\b\s*,?\s*colour\s*:/i.test(text)) dog += 4;
+  if (/\bbest time\b/.test(t)) dog += 3;
+  if (/\bbox\s*\d|\btrap\s*\d/.test(t)) dog += 3;
+  if (/\bearly speed\b/.test(t)) dog += 3;
+  if (/\b\d+\s*yds\b/.test(t)) dog += 2;
+  // Common Sportsbet greyhound track abbreviations seen in Recent Starts tables
+  if (/\b(cch|sou|wak|wan|aml|hor|bal|sand|mep|wpk|aprt|grafton|the meadows|addington)\b/.test(t)) dog += 2;
+  // Sub-30s race times in Recent Starts (e.g. "17.09s") are greyhound-distinctive
+  if (/\b1[6-9]\.\d{1,2}s\b/.test(t) || /\b2[0-9]\.\d{1,2}s\b/.test(t)) dog += 3;
+
+  return horse > dog ? 'horse' : 'greyhound';
+}
+
+/* ---------- Block splitting ---------- */
+function splitBlocks(raw){
+  const lines = raw.split(/\r?\n/);
+  const blocks = [];
+  let cur = null;
+  for (const line of lines){
+    const t = line.trim();
+    // Skip pure ordinal markers ("1st", "2nd", "3rd") that appear in dividend sections
+    if (/^\d+(st|nd|rd|th)$/i.test(t)) continue;
+    // Runner header: "N. Name" possibly followed by "(barrier)"
+    const m = t.match(/^(\d{1,2})\.\s+(.+?)(?:\s*\((\d+)\))?\s*$/);
+    if (m && t.length < 80 && !/\$/.test(t)){
+      if (cur) blocks.push(cur);
+      const name = m[2].replace(/\s*\([A-Z]{2,3}\)\s*$/, '').trim();
+      cur = { num: parseInt(m[1],10), name, barrier: m[3]?parseInt(m[3],10):null, lines: [] };
+    } else if (cur){
+      cur.lines.push(t);
+    }
+  }
+  if (cur) blocks.push(cur);
+  return blocks;
+}
+
+/* Deduplicate runner blocks by number. If the same num appears twice (because the
+   stripper failed and dividends leaked in), keep the block with more lines — that's
+   the real Race Card entry, not the 2-line dividend stub. */
+function dedupeBlocks(blocks){
+  const byNum = new Map();
+  for (const b of blocks){
+    const prev = byNum.get(b.num);
+    if (!prev || b.lines.length > prev.lines.length) byNum.set(b.num, b);
+  }
+  return Array.from(byNum.values()).sort((a,b)=>a.num-b.num);
+}
+
+
+/* ---------- Odds extraction ----------
+   Strategy: scan for the longest run of consecutive pure-numeric lines that look
+   like odds (>=1.01, <1000). Behaviour depends on context:
+   - If the run is preceded by a "Recent:" or "Flucs" label, treat as fluc list:
+     open = first, current = last, no place price.
+   - If exactly 3 nums (classic greyhound layout): open = 0, current = 2.
+   - If 4-7 nums (typical horse layout) and a place-shaped value is present
+     (much smaller than its left neighbour AND <10), use it.
+   - Otherwise: open = first, current = last. */
+function extractOdds(lines){
+  // Find the longest run of pure-numeric lines, plus what precedes it
+  let bestRun = null, bestLabel = '';
+  let cur = [], curLabel = '';
+  for (let i=0; i<lines.length; i++){
+    const t = lines[i];
+    if (/^[\d.]+$/.test(t)){
+      const v = parseFloat(t);
+      if (v >= 1.01 && v < 1000){
+        cur.push({val:v, idx:i});
+      } else {
+        if (cur.length >= 2 && (!bestRun || cur.length > bestRun.length)){ bestRun = cur; bestLabel = curLabel; }
+        cur = [];
+      }
+    } else {
+      if (cur.length >= 2 && (!bestRun || cur.length > bestRun.length)){ bestRun = cur; bestLabel = curLabel; }
+      // Track most recent non-numeric, non-empty label as context for the NEXT run
+      if (t.length > 0 && t.length < 40) curLabel = t.toLowerCase();
+      cur = [];
+    }
+  }
+  if (cur.length >= 2 && (!bestRun || cur.length > bestRun.length)){ bestRun = cur; bestLabel = curLabel; }
+  if (!bestRun) return {open:null, current:null, place:null};
+
+  const vals = bestRun.map(x => x.val);
+  const isFlucList = /recent|flucs|movers|fluctuations/.test(bestLabel) || vals.length >= 7;
+
+  if (isFlucList){
+    return { open: vals[0], current: vals[vals.length-1], place: null };
+  }
+  if (vals.length === 3){
+    return { open: vals[0], current: vals[2], place: null };
+  }
+  if (vals.length >= 4 && vals.length <= 7){
+    // Look for a place-shaped value
+    let placeIdx = -1;
+    for (let i=2; i<vals.length; i++){
+      if (vals[i] < vals[i-1] * 0.55 && vals[i] < 10 && vals[i] >= 1.04){
+        placeIdx = i; break;
+      }
+    }
+    if (placeIdx > 0){
+      return { open: vals[0], current: vals[placeIdx-1], place: vals[placeIdx] };
+    }
+  }
+  return { open: vals[0], current: vals[vals.length-1], place: null };
+}
+
+
+/* ---------- Per-runner field extraction ---------- */
+function parseRecentStarts(text){
+  // Recent Starts table on Sportsbet has rows like:
+  //   CCH    17.09s    295    14/05/2026    4th
+  // Returns an array of {pos, date, time, dist, track} ordered most-recent first.
+  const out = [];
+  const lines = text.split('\n');
+  for (const ln of lines){
+    const m = ln.match(/^([A-Z]{2,4})\s+([\d.]+s|-)\s+(\d{2,4})\s+(\d{1,2}\/\d{1,2}\/\d{2,4})\s+(\d{1,2})(?:st|nd|rd|th)\s*$/i);
+    if (m){
+      out.push({
+        track: m[1],
+        time: m[2] === '-' ? null : parseFloat(m[2]),
+        dist: parseInt(m[3],10),
+        date: m[4],
+        pos: parseInt(m[5],10)
+      });
+    }
+  }
+  return out;
+}
+
+function parseRunner(b){
+  const r = { num:b.num, name:b.name, barrier:b.barrier, scratched:false,
+              odds:null, openOdds:null, placeOdds:null,
+              form:'', formDigits:[],
+              careerStarts:null, careerWins:null, careerPlaces:null, careerThirds:null,
+              winPct:null, placePct:null,
+              daysOff:null, comment:'', tip:false, sbRating:null, weight:null,
+              bestTime:null, recentStarts:[] };
+  const text = b.lines.join('\n');
+  const lc = text.toLowerCase();
+
+  // Auto-scratch
+  if (/^\s*scratch/i.test(text) || /\bscratched\b/i.test(text)) r.scratched = true;
+  if (/vacant\s*box/i.test(b.name)) r.scratched = true;
+  if (/late scratching/i.test(text)) r.scratched = true;
+
+  if (/top tip/i.test(lc)) r.tip = true;
+
+  // Form: handle "F: 12345", "Last 6\n12345", "Last 6: 12345"
+  let m = text.match(/^F:\s*([\dXx\-]{1,20})/m);
+  if (!m) m = text.match(/Last\s*6\s*[:\n]\s*([\dXx\-]{1,20})/i);
+  if (m){ r.form = m[1]; r.formDigits = m[1].replace(/[^\dXx]/g,'').split('').slice(0,6); }
+
+  // Career: "20: 6-6-2"
+  m = text.match(/Career\s*[:\n]\s*(\d+):\s*(\d+)\-(\d+)\-(\d+)/i);
+  if (m){
+    r.careerStarts=+m[1]; r.careerWins=+m[2]; r.careerPlaces=+m[3]; r.careerThirds=+m[4];
+  }
+  // Direct Win % and Place % (Sportsbet shows these explicitly)
+  m = text.match(/Win\s*%\s*[:\n]?\s*([\d.]+)\s*%?/i);
+  if (m) r.winPct = parseFloat(m[1])/100;
+  m = text.match(/Place\s*%\s*[:\n]?\s*([\d.]+)\s*%?/i);
+  if (m) r.placePct = parseFloat(m[1])/100;
+
+  // Days off
+  m = text.match(/(\d+)\s*days?\s*since/i);
+  if (m) r.daysOff = +m[1];
+
+  // SB Rating
+  m = text.match(/SB Rating\s*[:\n]?\s*(\d+)/i) || text.match(/R&S Rating\s*[:\n]?\s*(\d+)/i);
+  if (m) r.sbRating = +m[1];
+
+  // Weight: greyhound body weight (~25-40kg) or horse handicap weight (~45-65kg)
+  m = text.match(/W:\s*([\d.]+)\s*kg/i) || text.match(/Weight\s*[:\n]?\s*([\d.]+)\s*kg/i);
+  if (m) r.weight = parseFloat(m[1]);
+
+  // Best Time (greyhound)
+  m = text.match(/Best\s*Time\s*[:\n]?\s*([\d.]+)/i);
+  if (m) r.bestTime = parseFloat(m[1]);
+
+  m = text.match(/Runner Comments?\s*[:\n]\s*([\s\S]{1,400}?)(?:\n\s*Career|\n\s*F:|\n\s*Last\s*6|\n\s*SB Rating|$)/i);
+  if (m) r.comment = m[1].replace(/\s+/g,' ').trim().slice(0,300);
+
+  r.recentStarts = parseRecentStarts(text);
+
+  const odds = extractOdds(b.lines);
+  r.openOdds = odds.open;
+  r.odds = odds.current;
+  r.placeOdds = odds.place;
+
+  return r;
+}
+
+
+function parsePaste(raw, sportHint){
+  const sport = sportHint==='auto' ? detectSport(raw) : sportHint;
+  const stripped = stripResultsSection(raw);
+  let blocks = splitBlocks(stripped);
+  // Dedupe (defence-in-depth in case the stripper missed something)
+  blocks = dedupeBlocks(blocks);
+  const runners = [];
+  for (const b of blocks){
+    if (!b.name) continue;
+    runners.push(parseRunner(b));
+  }
+  let condition = null;
+  const cm = raw.match(/(Heavy|Soft|Good|Firm|Synthetic)\s*\(?(\d+)?\)?/i);
+  if (cm) condition = cm[1] + (cm[2]?(' ('+cm[2]+')'):'');
+  return { sport, runners, condition };
+}
+
+/* ---------- Scoring helpers ---------- */
+function impliedPower(odds){
+  // Power-method overround removal: solve sum( (1/o)^k ) = 1 for k.
+  const invs = odds.map(o => 1/o);
+  const sumRaw = invs.reduce((a,b)=>a+b, 0);
+  if (sumRaw <= 1.0001) return { k:1, probs: invs.map(p => p/sumRaw) };
+  let lo = 0.5, hi = 3.0;
+  for (let it=0; it<60; it++){
+    const mid = (lo+hi)/2;
+    const s = invs.reduce((a,p) => a + Math.pow(p, mid), 0);
+    if (s > 1) lo = mid; else hi = mid;
+  }
+  const k = (lo+hi)/2;
+  const raw = invs.map(p => Math.pow(p, k));
+  const sFinal = raw.reduce((a,b)=>a+b, 0);
+  return { k, probs: raw.map(p => p/sFinal) };
+}
+
+function formScore(digits){
+  // Position quality with smoother decay weights (less single-run dominance).
+  if (!digits || !digits.length) return 0;
+  const dw = [0.32, 0.24, 0.16, 0.12, 0.09, 0.07];
+  const ps = d => {
+    if (d==='X' || d==='x' || d==='-') return 0;
+    const n = parseInt(d,10);
+    if (isNaN(n)) return 0;
+    if (n===1) return 1.0; if (n===2) return 0.65; if (n===3) return 0.40;
+    if (n===4) return 0.15; if (n===5) return 0.0;
+    return Math.max(-0.40, -0.10 * (n - 5));
+  };
+  let s=0, ws=0;
+  for (let i=0; i<digits.length; i++){
+    const w = dw[Math.min(i, dw.length-1)];
+    s += ps(digits[i]) * w; ws += w;
+  }
+  return ws > 0 ? s/ws : 0;
+}
+
+function bayesRate(num, den, prior, priorN){
+  // Empirical-Bayes shrink toward `prior` with prior sample size `priorN`.
+  return ((num||0) + priorN*prior) / ((den||0) + priorN);
+}
+
+function restBonus(days, sport){
+  if (!days || days >= 800) return 0;
+  const lo = sport==='greyhound' ? 4 : 10;
+  const hi = sport==='greyhound' ? 14 : 28;
+  if (days >= lo && days <= hi) return 0.06;
+  if (days < lo) return -0.04;
+  if (days > 90) return -0.10;
+  if (days > hi) return -0.02;
+  return 0;
+}
+
+
+function commentSignal(text){
+  if (!text) return 0;
+  const lc = text.toLowerCase();
+  const negKws = ['not keen','look to others','cannot enthuse','tame','failed','disappointing','below par',"doesn't appeal",'prefer in something','well held','out of the money','only for the minors','hard to win','battles','plain'];
+  const posKws = ['top tip','danger','go close','threaten','solid','strong','bold','appeal','impressive','sharp','genuine','key player','makes appeal','should figure','primed','peaking'];
+  const isNegated = (idx) => {
+    const window = lc.substring(Math.max(0, idx-30), idx);
+    return /\b(no|not|never|n't|cannot|hardly|didn't|won't)\b/.test(window);
+  };
+  let signal = 0;
+  for (const k of posKws){ const i = lc.indexOf(k); if (i>=0 && !isNegated(i)) signal += 0.04; }
+  for (const k of negKws){ const i = lc.indexOf(k); if (i>=0 && !isNegated(i)) signal -= 0.05; }
+  return Math.max(-0.15, Math.min(0.15, signal));
+}
+
+function bestTimeBonus(runners, sport){
+  // Returns a per-runner additive bonus in [-0.10, +0.10] based on best time
+  // relative to the field's median. Greyhounds only.
+  if (sport !== 'greyhound') return runners.map(_ => 0);
+  const times = runners.map(r => r.bestTime).filter(x => x && x > 0);
+  if (times.length < 3) return runners.map(_ => 0);
+  const sorted = [...times].sort((a,b)=>a-b);
+  const median = sorted[Math.floor(sorted.length/2)];
+  const std = Math.max(0.05, Math.sqrt(times.reduce((s,t)=>s+(t-median)*(t-median),0) / times.length));
+  return runners.map(r => {
+    if (!r.bestTime) return 0;
+    // Lower time is better. z = (median - time) / std.
+    const z = (median - r.bestTime) / std;
+    return Math.max(-0.10, Math.min(0.10, z * 0.05));
+  });
+}
+
+function barrierBonus(barrier, sport, fieldSize){
+  if (sport !== 'greyhound' || !barrier) return 0;
+  // Inside boxes (1-3) get a small edge in short sprints; box 8 with full field is a tiny penalty.
+  if (barrier <= 3) return 0.025;
+  if (barrier === 8 && fieldSize >= 7) return -0.02;
+  return 0;
+}
+
+
+function scoreRunners(runners, sport, liq){
+  const active = runners.filter(r => !r.scratched && r.odds && r.odds > 1.01);
+  if (!active.length) return { items: [], overroundK: 1 };
+
+  const po = impliedPower(active.map(r => r.odds));
+  // Market weight: high liquidity = market is sharper, weight it more.
+  const mktW = liq==='high' ? 0.45 : 0.32;
+  const stmW = liq==='high' ? 0.18 : 0.10;
+  const btBonuses = bestTimeBonus(active, sport);
+
+  // Sport-aware Bayesian win-rate prior (avg field size assumption)
+  const winPrior = sport==='greyhound' ? 0.125 : 0.085;
+  const placePrior = sport==='greyhound' ? 0.375 : 0.255;
+  const priorN = 8;
+
+  const items = active.map((r, i) => {
+    const mktProb = po.probs[i];
+
+    // Steam: drift FROM open TO current. Drift in (current > open) -> negative.
+    let steam = 0;
+    if (r.openOdds && r.openOdds > r.odds * 1.02){
+      steam = (r.openOdds - r.odds) / r.openOdds;
+      // Scale by sqrt(n*p) so a 50% drift on the favourite > 50% drift on a longshot
+      steam *= Math.min(1.5, Math.sqrt(mktProb * active.length));
+      steam = Math.min(1.0, steam);
+    }
+
+    const fs = formScore(r.formDigits);
+    // Use direct Win%/Place% if available, else compute from career, else prior
+    const winRate = r.winPct != null ? r.winPct
+      : bayesRate(r.careerWins, r.careerStarts, winPrior, priorN);
+    const placeRate = r.placePct != null ? r.placePct
+      : bayesRate((r.careerWins||0)+(r.careerPlaces||0)+(r.careerThirds||0), r.careerStarts, placePrior, priorN);
+
+    const rest = restBonus(r.daysOff, sport);
+    const sentiment = commentSignal(r.comment);
+    const bt = btBonuses[i];
+    const bar = barrierBonus(r.barrier, sport, active.length);
+
+    let score = 0;
+    // Market signal — biggest single contributor
+    score += mktProb * (mktW / 0.45);
+    // Steam
+    score += steam * stmW;
+    // Form: scale fs in [-0.4, 1.0] to approximately [0, 1]
+    score += Math.max(0, (fs + 0.4) / 1.4) * 0.16;
+    // Career win rate (Bayesian)
+    score += winRate * 0.14;
+    // Career place rate (Bayesian) — distinct signal from win rate
+    score += placeRate * 0.06;
+    // Rest, comment, best time, barrier — small additive nudges
+    score += rest;
+    score += sentiment;
+    score += bt;
+    score += bar;
+    if (r.tip) score += 0.05;
+    // Big drift penalty (>70% drift suggests off-the-track / unsupported)
+    if (r.openOdds && r.odds > r.openOdds * 1.7) score -= 0.10;
+
+    return { r, mktProb, steam, fs, winRate, placeRate, rest, sentiment, bt, bar, rawScore: Math.max(0.001, score) };
+  });
+
+  return { items, overroundK: po.k };
+}
+
+/* ---------- Plackett-Luce Monte Carlo ---------- */
+function gumbel(){
+  let u = Math.random();
+  if (u < 1e-12) u = 1e-12;
+  return -Math.log(-Math.log(u));
+}
+
+function monteCarlo(items, nSims){
+  const n = items.length;
+  if (!n) return null;
+  const logS = items.map(it => Math.log(it.rawScore));
+  const win = new Array(n).fill(0);
+  const top3 = new Array(n).fill(0);
+  const first4 = new Array(n).fill(0);
+  const u = new Array(n);
+  const idx = items.map((_,i)=>i);
+
+  // Pre-compute model's top-3 / top-4 for joint stats.
+  const rankedIdx = items.map((_,i)=>i).sort((a,b) => items[b].rawScore - items[a].rawScore);
+  const top3Set = new Set(rankedIdx.slice(0,3));
+  const top4Set = new Set(rankedIdx.slice(0,4));
+
+  let jointTop3 = 0, jointFirst4 = 0;
+  for (let s=0; s<nSims; s++){
+    for (let i=0; i<n; i++) u[i] = logS[i] + gumbel();
+    idx.sort((a,b) => u[b]-u[a]);
+    win[idx[0]]++;
+    const t3 = Math.min(3, n), t4 = Math.min(4, n);
+    let inTop3 = 0, inTop4 = 0;
+    for (let t=0; t<t3; t++){ top3[idx[t]]++; if (top3Set.has(idx[t])) inTop3++; }
+    for (let t=0; t<t4; t++){ first4[idx[t]]++; if (top4Set.has(idx[t])) inTop4++; }
+    if (inTop3 === t3) jointTop3++;
+    if (inTop4 === t4) jointFirst4++;
+  }
+  return {
+    win: win.map(x => x/nSims),
+    top3: top3.map(x => x/nSims),
+    first4: first4.map(x => x/nSims),
+    jointTop3: jointTop3/nSims,
+    jointFirst4: jointFirst4/nSims
+  };
+}
+
+
+/* ---------- Main analyse pipeline ---------- */
+let STATE = { parsed:null, scored:null, sim:null, sport:null, condition:null };
+
+function analyse(){
+  clearStatus();
+  const raw = $('paste').value.trim();
+  if (!raw){ setStatus('Paste race text first, or load a sample.', 'err'); return; }
+  const sportHint = $('sport').value;
+  const liq = $('liq').value;
+  const mode = $('mode').value;
+
+  let parsed;
+  try { parsed = parsePaste(raw, sportHint); }
+  catch(e){ setStatus('Parse failed: ' + e.message, 'err'); return; }
+
+  if (!parsed.runners.length){
+    setStatus('No runners found. Check the paste includes "1. Name", "2. Name" etc. and odds lines.', 'err');
+    return;
+  }
+
+  applyOverrides(parsed.runners);
+
+  const scoredOut = scoreRunners(parsed.runners, parsed.sport, liq);
+  if (!scoredOut.items.length){
+    setStatus('Parsed ' + parsed.runners.length + ' runners but none have valid odds. Use overrides to enter odds.', 'err');
+    renderOverrides(parsed.runners);
+    STATE.parsed = parsed;
+    return;
+  }
+
+  const items = scoredOut.items;
+  let sim = null;
+  if (mode === 'accurate'){
+    // Adaptive sim count: small fields need fewer sims for a stable joint top-3.
+    const n = items.length;
+    const nSims = n <= 6 ? 12000 : (n <= 8 ? 10000 : (n <= 12 ? 8000 : 6000));
+    sim = monteCarlo(items, nSims);
+    items.forEach((it, i) => { it.win = sim.win[i]; it.top3 = sim.top3[i]; it.first4 = sim.first4[i]; });
+  } else {
+    const sum = items.reduce((s,it)=>s+it.rawScore, 0);
+    items.forEach(it => {
+      it.win = it.rawScore/sum;
+      it.top3 = Math.min(0.99, it.win * 2.4);
+      it.first4 = Math.min(0.99, it.win * 3.0);
+    });
+  }
+
+  items.sort((a,b) => b.win - a.win);
+  items.forEach((it, i) => {
+    it.rank = i+1;
+    it.fairOdds = 1/Math.max(0.001, it.win);
+    it.edge = (it.win - it.mktProb) / it.mktProb;
+  });
+
+  STATE = { parsed, scored:items, sim, sport:parsed.sport, condition:parsed.condition, liq, mode, overroundK: scoredOut.overroundK };
+  render();
+  setStatus('Analysed ' + items.length + ' runner(s) as ' + parsed.sport + (parsed.condition?' on '+parsed.condition.toLowerCase():'') + '. Sim mode: ' + mode + '.', 'ok');
+}
+
+/* ---------- Overrides ---------- */
+function renderOverrides(runners){
+  const wrap = $('overrides');
+  wrap.innerHTML = '';
+  runners.forEach((r, i) => {
+    const row = document.createElement('div');
+    row.className = 'ov-row';
+    row.innerHTML =
+      '<div class="ov-num">'+r.num+'</div>'+
+      '<div class="ov-name">'+r.name+'</div>'+
+      '<input type="number" step="0.01" placeholder="'+(r.odds||'-')+'" data-ov="odds" data-idx="'+i+'">'+
+      '<label style="display:flex;align-items:center;gap:4px;margin:0;font-size:11px;color:var(--tx2)"><input type="checkbox" data-ov="scratch" data-idx="'+i+'"'+(r.scratched?' checked':'')+' style="margin:0">scr</label>';
+    wrap.appendChild(row);
+  });
+  $('ovCard').style.display = '';
+}
+
+function applyOverrides(runners){
+  const inputs = document.querySelectorAll('#overrides [data-ov]');
+  inputs.forEach(el => {
+    const idx = +el.dataset.idx;
+    if (!runners[idx]) return;
+    if (el.dataset.ov === 'odds'){
+      const v = parseFloat(el.value);
+      if (!isNaN(v) && v > 1.01){ runners[idx].odds = v; if (!runners[idx].openOdds) runners[idx].openOdds = v; }
+    } else if (el.dataset.ov === 'scratch'){
+      runners[idx].scratched = el.checked;
+    }
+  });
+}
+
+
+/* ---------- Render ---------- */
+function pctFmt(x){ return (x*100).toFixed(1) + '%'; }
+function dollarsFmt(x){ if (x==null || isNaN(x)) return '–'; return '$' + x.toFixed(2); }
+function edgeTag(e){
+  if (e==null || isNaN(e)) return '';
+  const pct = (e*100).toFixed(0);
+  if (e > 0.10) return '<span class="tag ok">+'+pct+'% edge</span>';
+  if (e < -0.15) return '<span class="tag err">'+pct+'%</span>';
+  return '';
+}
+
+function render(){
+  const items = STATE.scored;
+  const sim = STATE.sim;
+  const top = items[0], second = items[1], third = items[2], fourth = items[3];
+  const out = $('results');
+  let html = '';
+
+  html += '<h2>Picks</h2><div class="picks">';
+  html += '<div class="pick gold"><div class="pick-lbl">Win pick</div><div class="pick-val">'+top.r.num+'. '+top.r.name+'</div><div class="pick-sub">'+dollarsFmt(top.r.odds)+' &middot; model '+pctFmt(top.win)+' &middot; fair '+dollarsFmt(top.fairOdds)+'</div>'+(top.edge>0.05?'<div class="pick-detail"><span class="tag ok">+'+(top.edge*100).toFixed(0)+'% edge</span></div>':'')+'</div>';
+  if (second){
+    html += '<div class="pick blue"><div class="pick-lbl">Top-3 quinella</div><div class="pick-val">'+top.r.num+' &middot; '+second.r.num+(third?' &middot; '+third.r.num:'')+'</div><div class="pick-sub">';
+    if (sim){ html += 'Joint P(all 3 finish top-3) = ' + pctFmt(sim.jointTop3); }
+    else    { html += pctFmt(top.win) + ' / ' + pctFmt(second.win) + ' / ' + (third?pctFmt(third.win):'-'); }
+    html += '</div></div>';
+  }
+  if (fourth){
+    html += '<div class="pick green"><div class="pick-lbl">First-4 box</div><div class="pick-val">'+top.r.num+'&middot;'+second.r.num+'&middot;'+third.r.num+'&middot;'+fourth.r.num+'</div><div class="pick-sub">';
+    if (sim){ html += 'Joint P = ' + pctFmt(sim.jointFirst4) + ' &middot; 24 combos'; }
+    else    { html += '24 combos (est)'; }
+    html += '</div></div>';
+  }
+  html += '</div>';
+
+  html += '<h2>All runners <span class="muted">— ranked by simulated win probability</span></h2>';
+  html += '<table><thead><tr><th style="width:48px">Rank</th><th>Runner</th><th style="width:56px">Odds</th><th style="width:56px">Open</th><th style="width:54px">Form</th><th>Win prob</th><th style="width:64px">Top-3</th><th style="width:64px">First-4</th><th style="width:60px">Fair</th><th style="width:80px">Value</th></tr></thead><tbody>';
+  for (let i=0; i<items.length; i++){
+    const it = items[i], r = it.r;
+    const rkCls = i===0?'g':i===1?'b':i===2?'p':'';
+    const rowCls = i===0?'top1':i===1?'top2':i===2?'top3':'';
+    const formDisplay = (r.form || '').slice(-6) || '–';
+    const barW = Math.round(Math.min(1, it.win*3) * 100);
+    const tipBadge = r.tip ? ' <span class="tag tip">tip</span>' : '';
+    html += '<tr class="'+rowCls+'">';
+    html += '<td><span class="rk '+rkCls+'">'+(i+1)+'</span></td>';
+    html += '<td><strong>'+r.num+'. '+r.name+'</strong>'+tipBadge+(r.barrier?' <span class="muted">bar '+r.barrier+'</span>':'')+'</td>';
+    html += '<td><strong>'+dollarsFmt(r.odds)+'</strong></td>';
+    html += '<td class="muted">'+dollarsFmt(r.openOdds)+'</td>';
+    html += '<td class="muted" style="font-family:ui-monospace,monospace;font-size:12px">'+formDisplay+'</td>';
+    html += '<td><div class="bar '+(i===0?'gold':'')+'"><i style="width:'+barW+'%"></i></div>'+pctFmt(it.win)+'</td>';
+    html += '<td>'+pctFmt(it.top3)+'</td>';
+    html += '<td>'+pctFmt(it.first4)+'</td>';
+    html += '<td class="muted">'+dollarsFmt(it.fairOdds)+'</td>';
+    html += '<td>'+edgeTag(it.edge)+'</td>';
+    html += '</tr>';
+  }
+  const scr = STATE.parsed.runners.filter(r => r.scratched);
+  for (const r of scr){
+    html += '<tr class="scratched"><td>—</td><td colspan="9">'+r.num+'. '+r.name+' &middot; scratched</td></tr>';
+  }
+  html += '</tbody></table>';
+
+  html += '<div class="muted" style="margin-top:8px">Sport: <strong>'+STATE.sport+'</strong>';
+  if (STATE.condition) html += ' &middot; Track: <strong>'+STATE.condition+'</strong>';
+  html += ' &middot; Overround k = '+(STATE.overroundK||1).toFixed(3);
+  html += ' &middot; '+(STATE.mode==='accurate'?'Plackett-Luce MC':'Deterministic')+'</div>';
+
+  out.innerHTML = html;
+  renderOverrides(STATE.parsed.runners);
+}
+
+
+/* ---------- Self-tests ---------- */
+function runSelfTests(){
+  const log = [];
+  const test = (name, cond, detail) => log.push({ name, pass: !!cond, detail: detail||'' });
+
+  // Math: implied power
+  { const p = impliedPower([2,2,2,2]); const sum=p.probs.reduce((a,b)=>a+b,0);
+    test('impliedPower no-margin sums to 1', Math.abs(sum-1) < 1e-6); }
+  { const p = impliedPower([2.9, 23, 9, 3.3, 6.5, 6.5, 17]); const sum=p.probs.reduce((a,b)=>a+b,0);
+    test('impliedPower 7-runner book sums to 1', Math.abs(sum-1) < 1e-4, 'k='+p.k.toFixed(3));
+    test('impliedPower 7-runner book has k > 1', p.k > 1, 'k='+p.k.toFixed(3)); }
+
+  // Form score
+  { const s = formScore(['1','1','1','1','1','1']); test('formScore six wins ~ 1.0', Math.abs(s-1) < 0.01, 's='+s.toFixed(3)); }
+  { const s = formScore(['9','9','9','9']);          test('formScore four 9ths is negative', s < -0.3, 's='+s.toFixed(3)); }
+
+  // Bayes shrinkage
+  { const w = bayesRate(0, 0, 0.125, 8); test('bayesRate debut greyhound ~ prior 0.125', Math.abs(w-0.125) < 0.02, 'w='+w.toFixed(3)); }
+  { const w = bayesRate(6, 20, 0.125, 8); test('bayesRate 6/20 shrinks toward prior',
+      Math.abs(w - (6 + 8*0.125)/(20+8)) < 1e-6, 'w='+w.toFixed(3)); }
+
+  // Monte Carlo
+  { const fake = [{rawScore:0.6},{rawScore:0.3},{rawScore:0.1}];
+    const mc = monteCarlo(fake, 30000);
+    test('PL win prob matches normalized score (fav)', Math.abs(mc.win[0]-0.6) < 0.015, 'expected 0.6 got '+mc.win[0].toFixed(3));
+    test('PL win probs sum to 1', Math.abs(mc.win.reduce((a,b)=>a+b,0)-1) < 1e-6);
+    test('PL top-3 probs sum to min(3,n)=3', Math.abs(mc.top3.reduce((a,b)=>a+b,0)-3) < 1e-6); }
+
+  // BUG-FIX: Final Results section is stripped so favourites aren't double-counted
+  {
+    const raw = `Final Results\n22 May 12:49\nResults\nDividends\n1st\n7. Durrington (7)\nT: Garry A Cleeve\nWin\n1.70\nPlace\n1.24\n2nd\n3. Homebush Nala (3)\nT: John Mcinerney\nPlace\n7.50\nRace Card\n7. Durrington (7)\nF: 262724\nT: Garry A Cleeve\nRecent:\n1.95\n2.00\n1.95\n1.90\n1.75\n1.60\n1.70\n1.65\n1.70\n2.00\n1.70\nCareer\n20: 6-6-2\nSB Rating\n96\n3. Homebush Nala (3)\nF: 735143\nRecent:\n23.00\n26.00\n27.00\n31.00\n34.00\n35.00\n31.00\n27.00\n31.00\nCareer\n44: 8-10-5\n`;
+    const parsed = parsePaste(raw, 'auto');
+    const nums = parsed.runners.map(r => r.num).sort((a,b)=>a-b);
+    test('No duplicate runners after results-section strip', new Set(nums).size === nums.length, 'nums='+JSON.stringify(nums));
+    const dur = parsed.runners.find(r => r.num===7);
+    test('Durrington current odds taken from race card not dividend (1.70 not 1.24)',
+      dur && Math.abs(dur.odds-1.70) < 1e-6, 'odds='+(dur && dur.odds));
+  }
+
+  // BUG-FIX: extractOdds with explicit Recent: label uses first/last semantics
+  {
+    const lines = ['Recent:','7.00','6.50','6.00','6.50','7.00','6.50','6.00','6.50','6.00'];
+    const o = extractOdds(lines);
+    test('extractOdds with Recent: label uses first/last (no false place price)',
+      o.open===7.00 && o.current===6.00 && o.place===null, JSON.stringify(o));
+  }
+
+  // BUG-FIX: extractOdds for 3-num greyhound (open/fluc/current)
+  {
+    const o = extractOdds(['1. Dog','5.00','4.50','3.80','Career','2: 1-0-0']);
+    test('extractOdds 3-num greyhound', o.open===5.00 && o.current===3.80, JSON.stringify(o));
+  }
+
+  // BUG-FIX: extractOdds for horse layout with place price
+  {
+    const o = extractOdds(['1. Farset','2.60','2.70','2.80','2.90','1.33','4.60','Place Rate']);
+    test('extractOdds horse layout finds place 1.33', o.current===2.90 && o.place===1.33, JSON.stringify(o));
+  }
+
+  // Vacant Box auto-scratch
+  {
+    const raw = 'Race Card\n1. Vacant Box 1 (1)\nScratched\n2. Real Dog (2)\nF: 12345\n5.00\n4.50\n3.80\n';
+    const parsed = parsePaste(raw, 'greyhound');
+    const v = parsed.runners.find(r => r.num===1);
+    test('Vacant Box auto-scratches', v && v.scratched, 'v.scratched='+(v && v.scratched));
+  }
+
+  // Sport detection
+  { test('detect horse: jockey + kg', detectSport('Jockey: J. Doe\nW: 58.5kg\nExpected Settling Position\nLeader')==='horse'); }
+  { test('detect greyhound: Whelped + Bitch + Best Time', detectSport('1. Foo\nWhelped 10 May 2024\nColour: Black\nBitch\nBest Time 16.85')==='greyhound'); }
+
+  // Recent Starts table parser
+  {
+    const text = 'Recent Starts\nCCH 17.09s 295 14/05/2026 4th\nCCH 17.41s 295 23/04/2026 6th\nCCH - 295 16/04/2026 6th\n';
+    const rs = parseRecentStarts(text);
+    test('parseRecentStarts extracts 3 rows', rs.length === 3, 'got '+rs.length);
+    test('parseRecentStarts handles "-" time', rs[2] && rs[2].time === null);
+  }
+
+  // Render
+  const el = $('tests');
+  el.className = 'show';
+  const pass = log.filter(t=>t.pass).length;
+  el.innerHTML = '<div style="margin-bottom:6px;color:var(--tx2);font-weight:600">'+pass+'/'+log.length+' tests passed</div>' +
+    log.map(t => '<div class="test-line ' + (t.pass?'test-pass':'test-fail') + '">' +
+      (t.pass?'PASS':'FAIL') + '  ' + t.name +
+      (t.detail?'  <span style="color:var(--tx3)">['+t.detail+']</span>':'') + '</div>').join('');
+}
+
+
+/* ---------- Sample data ---------- */
+const SAMPLE_GREY = `Shepparton R1 - 450m
+
+4. King Of Chaos (4)
+5.00
+4.50
+3.00
+Runner Comments
+Top tip, good placings at Bendigo. Goes close.
+F: 3245
+Career
+4: 0-1-1
+SB Rating
+99
+19 days since last race
+
+5. Unleash Gabbi (5)
+4.00
+3.80
+3.50
+Runner Comments
+Good mid race pace, smart placings. Danger.
+F: 4X4223
+Career
+20: 0-8-6
+SB Rating
+95
+5 days since last race
+
+6. Multiple (6)
+3.80
+3.60
+3.50
+Runner Comments
+Has shown ability. Last 3 placings. Threatens.
+F: 5233
+Career
+4: 0-1-2
+SB Rating
+93
+4 days since last race
+`;
+
+const SAMPLE_HORSE = `Hawkesbury Heavy (10)
+1300m R1 Turfmate International Mdn Hcp
+
+1. Farset (8)
+W: 60.5kg
+F: x22x22
+2.60
+2.70
+2.80
+2.90
+1.33
+4.60
+Runner Comments
+Top Tip. Early form spaced but has shown some talent. Outer barrier but has good gate speed.
+Career
+5: 0-4-0
+SB Rating
+99
+14 days since last race
+
+4. Monotone (5)
+W: 58.5kg
+F: 68x
+4.50
+3.50
+3.40
+3.30
+1.40
+6.70
+Runner Comments
+Set for second campaign. Strengthened up. Capable of making an impact fresh.
+Career
+2: 0-0-0
+SB Rating
+99
+160 days since last race
+
+3. Fitzclarence (2)
+W: 58.5kg
+F: 72
+9.50
+9.00
+8.50
+9.00
+2.40
+Runner Comments
+Courageous effort at Kembla Grange. Can make his presence felt.
+Career
+2: 0-1-0
+SB Rating
+90
+22 days since last race
+`;
+
+
+const SAMPLE_RESULTS = `Addington
+Good
+295m R10 Happy Birthday Maureen Kingston Sprint
+Final Results
+
+Win or Place
+Final Race Results
+22 May 12:49
+
+Results
+
+Dividends
+
+Exotics
+1st
+7. Durrington (7)
+T: Garry A Cleeve
+Win
+1.70
+Place
+1.24
+
+2nd
+3. Homebush Nala (3)
+T: John Mcinerney
+Place
+7.50
+3rd
+8. Dream Ahead (8)
+T: Daniel A Roberts
+4th
+6. Let Him Cook (6)
+T: Matthew G Roberts
+Race Card
+
+7. Durrington (7)
+F: 262724
+T: Garry A Cleeve
+Recent:
+1.95
+2.00
+1.95
+1.90
+1.75
+1.60
+1.70
+1.65
+1.70
+2.00
+1.70
+Last 6
+262724
+Career
+20: 6-6-2
+Win %
+30%
+Place %
+70%
+Best Time
+16.85
+SB Rating
+96
+Weight
+28.8kg
+8 days since last race
+
+8. Dream Ahead (8)
+F: 441145
+T: Daniel A Roberts
+Recent:
+7.00
+6.50
+6.00
+6.50
+7.00
+6.50
+6.00
+6.50
+6.00
+Last 6
+441145
+Career
+32: 9-4-0
+Win %
+28.13%
+Place %
+40.63%
+Best Time
+16.78
+SB Rating
+100
+Weight
+31.4kg
+2 days since last race
+
+4. Smoking Ivan (4)
+F: 343726
+T: Matthew G Roberts
+Recent:
+5.00
+5.50
+5.00
+5.50
+6.00
+6.50
+7.00
+6.50
+7.00
+Last 6
+343726
+Career
+130: 30-24-27
+Win %
+23.08%
+Place %
+62.31%
+Best Time
+16.70
+SB Rating
+92
+Weight
+34.8kg
+43 days since last race
+
+2. Claws In Brick (2)
+F: 364413
+T: Matthew G Roberts
+Recent:
+5.50
+6.50
+7.00
+7.50
+7.00
+8.00
+8.50
+7.50
+8.00
+Last 6
+364413
+Career
+55: 12-6-15
+Win %
+21.82%
+Place %
+60%
+Best Time
+16.86
+SB Rating
+100
+Weight
+32.5kg
+8 days since last race
+
+5. Skeletor (5)
+F: 757174
+T: Daniel A Roberts
+Recent:
+7.50
+8.00
+8.50
+8.00
+8.50
+9.00
+9.50
+9.00
+9.50
+Last 6
+757174
+Career
+36: 10-3-4
+Win %
+27.78%
+Place %
+47.22%
+Best Time
+16.90
+SB Rating
+83
+Weight
+30.8kg
+7 days since last race
+
+6. Let Him Cook (6)
+F: 433357
+T: Matthew G Roberts
+Recent:
+7.50
+8.00
+8.50
+9.00
+9.50
+10.00
+11.00
+10.00
+11.00
+Last 6
+433357
+Career
+101: 23-21-15
+Win %
+22.77%
+Place %
+58.42%
+Best Time
+16.87
+SB Rating
+97
+Weight
+30.9kg
+8 days since last race
+
+3. Homebush Nala (3)
+F: 735143
+T: John Mcinerney
+Recent:
+23.00
+26.00
+27.00
+31.00
+34.00
+35.00
+31.00
+27.00
+31.00
+Last 6
+735143
+Career
+44: 8-10-5
+Win %
+18.18%
+Place %
+52.27%
+Best Time
+17.00
+SB Rating
+97
+Weight
+26.3kg
+8 days since last race
+
+1. Vacant Box 1 (1)
+Scratched
+`;
+
+
+/* ---------- Wire up ---------- */
+$('btnRun').addEventListener('click', analyse);
+$('btnReanalyse').addEventListener('click', analyse);
+$('btnSampleGrey').addEventListener('click',   () => { $('paste').value = SAMPLE_GREY;    $('sport').value='auto'; clearStatus(); });
+$('btnSampleHorse').addEventListener('click',  () => { $('paste').value = SAMPLE_HORSE;   $('sport').value='auto'; clearStatus(); });
+$('btnSampleResults').addEventListener('click',() => { $('paste').value = SAMPLE_RESULTS; $('sport').value='auto'; clearStatus(); });
+$('btnTests').addEventListener('click', runSelfTests);
+$('btnClear').addEventListener('click', () => {
+  $('paste').value = ''; $('results').innerHTML = '';
+  $('ovCard').style.display = 'none'; clearStatus();
+});
+
+</script>
+</body>
+</html>
