@@ -61,6 +61,15 @@ CREATE TABLE IF NOT EXISTS results (
     finishing_order_json TEXT NOT NULL,      -- ["R1_3","R1_7",...]
     settled_at     TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS bot_insights (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    text           TEXT NOT NULL,
+    severity       TEXT NOT NULL,            -- low | medium | high
+    context_key    TEXT,
+    created_at     TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_bot_insights_ctx ON bot_insights(context_key);
 """
 
 
@@ -137,6 +146,16 @@ class Database:
                 (race_id, json.dumps(finishing_order), datetime.utcnow().isoformat()),
             )
 
+    def insert_insight(self, text: str, severity: str = "medium",
+                       context_key: str | None = None) -> int:
+        with self.connect() as cx:
+            cur = cx.execute(
+                "INSERT INTO bot_insights (text, severity, context_key, created_at) "
+                "VALUES (?,?,?,?)",
+                (text, severity, context_key, datetime.utcnow().isoformat()),
+            )
+            return int(cur.lastrowid)
+
     # --- reads -----------------------------------------------------------
     def all_bets_df(self):
         import pandas as pd
@@ -150,6 +169,14 @@ class Database:
                 "SELECT * FROM predictions WHERE race_id=? ORDER BY win_prob DESC",
                 cx, params=(race_id,),
             )
+
+    def recent_insights(self, limit: int = 30) -> list[dict]:
+        with self.connect() as cx:
+            rows = cx.execute(
+                "SELECT id, text, severity, context_key, created_at "
+                "FROM bot_insights ORDER BY id DESC LIMIT ?", (limit,)
+            ).fetchall()
+            return [dict(r) for r in rows]
 
 
 _db: Database | None = None
