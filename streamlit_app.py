@@ -71,8 +71,8 @@ with st.sidebar:
 
 
 # --- tabs -----------------------------------------------------------------
-tab_card, tab_backtest, tab_perf, tab_settings = st.tabs(
-    ["Today's Card", "Backtest", "Performance", "Settings"]
+tab_card, tab_sgm, tab_backtest, tab_perf, tab_settings = st.tabs(
+    ["Today's Card", "AFL SGM", "Backtest", "Performance", "Settings"]
 )
 
 
@@ -146,6 +146,12 @@ with tab_card:
             st.dataframe(pd.DataFrame(
                 [(" → ".join(c), round(p, 4)) for c, p in sim.first4],
                 columns=["Combo", "Prob"]), hide_index=True, use_container_width=True)
+
+
+# =========================================================================
+with tab_sgm:
+    from afl_sgm.streamlit_tab import render as render_sgm_tab
+    render_sgm_tab()
 
 
 # =========================================================================
