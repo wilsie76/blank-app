@@ -51,7 +51,24 @@
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:6px}
   .factor-bar{height:6px;background:#0a1029;border-radius:4px;overflow:hidden;margin-top:3px}
   .factor-bar > span{display:block;height:100%;background:linear-gradient(90deg,var(--accent2),var(--accent))}
-  @media(max-width:1000px){main{grid-template-columns:1fr}.res-grid{grid-template-columns:1fr}}
+  /* Source tabs */
+  .tabbar{display:flex;gap:6px;border-bottom:1px solid var(--border);margin-bottom:14px;flex-wrap:wrap}
+  .tabbar button{flex:0 0 auto;width:auto;padding:8px 14px;border-radius:8px 8px 0 0;border:1px solid var(--border);border-bottom:none;background:#0e1430;color:var(--muted);font-weight:600;font-size:12px;letter-spacing:.4px;text-transform:uppercase}
+  .tabbar button.active{background:linear-gradient(180deg,var(--panel2),var(--panel));color:var(--ink);border-color:var(--accent);box-shadow:0 -2px 0 var(--accent) inset}
+  .tabbar button:hover:not(.active){background:#161e44;color:#cdd3ff}
+  .tabbar .tabmeta{margin-left:auto;align-self:center;font-size:11px;color:var(--muted);padding:0 4px}
+  .src-empty{background:rgba(245,158,11,.08);border:1px dashed #7a560a;border-radius:10px;padding:14px;font-size:12px;color:#fcd34d;text-align:center}
+  .agree-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+  .agree-card{background:#0e1430;border:1px solid var(--border);border-radius:10px;padding:10px}
+  .agree-card .lbl{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px}
+  .agree-card .val{font-size:13px;color:var(--ink)}
+  .agree-card.match{border-color:#1f6f3f;background:rgba(34,197,94,.06)}
+  .agree-card.mismatch{border-color:#7a1f1f;background:rgba(239,68,68,.06)}
+  .src-pill{display:inline-block;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:700;margin-left:6px;text-transform:uppercase;letter-spacing:.4px}
+  .src-pill.tab{background:rgba(34,211,238,.18);color:#67e8f9;border:1px solid #155e75}
+  .src-pill.sb{background:rgba(124,92,255,.18);color:#c4b5fd;border:1px solid #4c2bb5}
+  .src-pill.combined{background:rgba(34,197,94,.18);color:#86efac;border:1px solid #1f6f3f}
+  @media(max-width:1000px){main{grid-template-columns:1fr}.res-grid{grid-template-columns:1fr}.agree-grid{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -144,7 +161,15 @@
     </div>
 
     <div class="card" style="margin-top:16px">
-      <h2>Win Probabilities</h2>
+      <h2>Win Probabilities <span id="srcLabel" class="src-pill combined">Combined</span></h2>
+      <div class="tabbar" role="tablist">
+        <button id="tabBtnCombined" class="active" onclick="setSourceTab('combined')">⭐ Combined</button>
+        <button id="tabBtnTab" onclick="setSourceTab('tab')">TAB</button>
+        <button id="tabBtnSB" onclick="setSourceTab('sb')">Sportsbet</button>
+        <span class="tabmeta" id="tabMeta">Run prediction to populate.</span>
+      </div>
+      <div id="agreementPanel"></div>
+      <div id="srcEmpty"></div>
       <div class="scroll" style="max-height:340px"><table id="winTable"></table></div>
     </div>
 
@@ -214,6 +239,8 @@ const FACTORS = {
 /* state */
 let RUNNERS = [];
 let DETECTED_RACES = [];
+let LAST_RESULTS = { combined: null, tab: null, sb: null };
+let ACTIVE_SOURCE = 'combined';
 
 /* =========================================================================
    UI BUILDERS
@@ -501,6 +528,351 @@ function parseRunnerStats(block, code){
 }
 
 /* =========================================================================
+   TAB SECTION PARSER
+   The TAB section uses ALL-CAPS runner cards (no #/box header), trainer on
+   the next line ("TL Hutton", "TJ Carter"), then 4 isolated decimals (TAB Win,
+   TAB Place, Tote Win, Tote Place) or "SCR x4" for scratched. Detects the
+   section by everything that comes BEFORE the first SportsBet runner header
+   (or the entire body if no SB headers are present).
+   ========================================================================= */
+const TAB_TRAINER_RE = /^T[A-Z]{1,2}\s+[A-Z][a-z][A-Za-z'\-\s]*$/;
+const TAB_NAME_BAD = new Set([
+  'TAB','SCR','SP','EW','GR','MX','BL','RED','FWN','BLU','RES','BLK','BR','SUB',
+  'SUBSTITUTES','SCRATCHINGS','REPLAY','RUNNER','RUNNERS','HIDE','FLUCS','FAST',
+  'FORM','SAME','RACE','WIN','PLACE','EXACTA','TRIFECTA','QUINELLA','DUET',
+  'JACKPOT','FIRST','RESULTS','DIVIDENDS','DIVIDEND','EXOTICS','RACING','EARLY',
+  'EXPERT','CAREER','SIRE','DAM','TYPE','TRACK','DISTANCE','WHELPED','PRIZE',
+  'BIO','COLOUR','WEIGHT','SUBSTITUTES','APPP','NO','AWARDS','TOP','TIP','TIPS',
+  'SPEED','MAP','JACKPOTS','MULTI','LEG','APPROXIMATES','DEDUCTIONS','MOVERS',
+  'MARKET','FAVOURITE','OUT','INFORMATION','MY','BETS','ON','THIS','CARD',
+  'WIDTH','GOOD','SOFT','HEAVY','SYNTHETIC','FIRM','FAST','SLOW',
+  'BLACKBOOK','MARGIN','BOX','TIMES','SECTIONALS','CLASS','OPEN','TOTE'
+]);
+
+function splitTabSbBody(body){
+  const lines = body.split('\n');
+  let sbStart = -1;
+  for(let i=0;i<lines.length;i++){
+    const t = lines[i].trim();
+    if(/^\d{1,2}\.\s+.+\s*\(\d{1,2}\)\s*$/.test(t)){ sbStart = i; break; }
+  }
+  if(sbStart === -1) return { tabBody: body, sbBody: '' };
+  return {
+    tabBody: lines.slice(0, sbStart).join('\n'),
+    sbBody:  lines.slice(sbStart).join('\n')
+  };
+}
+
+function isPlausibleTabName(name){
+  if(!name) return false;
+  if(name.length < 4) return false;
+  // single-word names must be >=6 chars (filters venue codes like TGAR/TARE)
+  if(!/\s/.test(name) && name.length < 6) return false;
+  // skip reserved / label words
+  const words = name.split(/\s+/);
+  if(words.length === 1 && TAB_NAME_BAD.has(words[0])) return false;
+  // sentinel: "TWELVE MEN", "WONDER KID" etc. allow if all words >= 2 chars
+  if(words.some(w => w.length < 2 && !/^[A-Z]$/.test(w))) return false;
+  return true;
+}
+
+function parseTABBlocks(body){
+  const lines = body.split('\n');
+  const blocks = [];
+  let cur = null;
+  const NAME_RE = /^([A-Z][A-Z0-9'\.\-\s]{2,50})$/;
+  const NAME_WITH_BOX_RE = /^([A-Z][A-Z0-9'\.\-\s]{2,50})\s*\((\d+)\)\s*$/;
+
+  for(let i=0;i<lines.length;i++){
+    const t = lines[i].trim();
+    let name = null, vacantBox = null;
+    let m = t.match(NAME_WITH_BOX_RE);
+    if(m && isPlausibleTabName(m[1].trim())){
+      name = m[1].trim(); vacantBox = parseInt(m[2]);
+    } else {
+      m = t.match(NAME_RE);
+      if(m && isPlausibleTabName(m[1].trim())) name = m[1].trim();
+    }
+    if(name){
+      // Confirm: next non-blank 1-3 lines must look like trainer or "SCR"
+      let trainerLine = '';
+      for(let j=i+1;j<=Math.min(i+3, lines.length-1);j++){
+        const nx = lines[j].trim();
+        if(!nx) continue;
+        if(TAB_TRAINER_RE.test(nx) || /^SCR$/.test(nx)){ trainerLine = nx; break; }
+        // Allow patterns like "T: J Carter" too
+        const tt = nx.match(/^T:\s*(.+)$/);
+        if(tt){ trainerLine = tt[1].trim(); break; }
+        break;
+      }
+      if(trainerLine){
+        if(cur) blocks.push(cur);
+        cur = {
+          name, trainer: trainerLine, vacantBox,
+          scratched: /^SCR$/.test(trainerLine),
+          lines: [t]
+        };
+        continue;
+      }
+    }
+    if(cur) cur.lines.push(lines[i]);
+  }
+  if(cur) blocks.push(cur);
+  return blocks;
+}
+
+function parseTABStats(block){
+  const text = block.lines.join('\n');
+  const s = { name: block.name, trainer: block.trainer, scratched: !!block.scratched, source: 'tab' };
+
+  // 4 odds immediately after trainer line: TAB Win Fixed, TAB Place Fixed, Tote Win, Tote Place
+  const lines = block.lines.map(l=>l.trim());
+  const trainerIdx = lines.findIndex(l => l === block.trainer);
+  const oddsAfter = [];
+  if(trainerIdx >= 0){
+    for(let i=trainerIdx+1;i<lines.length && oddsAfter.length<6;i++){
+      const ln = lines[i];
+      if(!ln) continue;
+      if(/^SCR$/.test(ln)){ s.scratched = true; break; }
+      const m = ln.match(/^\$?(\d{1,3}(?:\.\d{1,2})?)$/);
+      if(m){ oddsAfter.push(parseFloat(m[1])); }
+      else if(oddsAfter.length>0) break;
+      else if(oddsAfter.length===0 && /^Add to Blackbook$/i.test(ln)) continue;
+      else if(oddsAfter.length===0) break;
+    }
+  }
+  if(oddsAfter.length >= 1) s.tabFixedWin = oddsAfter[0];
+  if(oddsAfter.length >= 2) s.tabFixedPlace = oddsAfter[1];
+  if(oddsAfter.length >= 3) s.toteWin = oddsAfter[2];
+  if(oddsAfter.length >= 4) s.totePlace = oddsAfter[3];
+  if(s.tabFixedWin) s.winFixed = s.tabFixedWin; // canonical for shared engine
+  if(s.tabFixedPlace) s.placeFixed = s.tabFixedPlace;
+
+  // Career: "87: 15 - 28" => starts:87, wins:15, places(combined):28
+  const careerM = text.match(/Career\s*\n\s*(\d+)\s*:\s*(\d+)\s*-\s*(\d+)/);
+  if(careerM){
+    s.careerStarts = +careerM[1]; s.careerWins = +careerM[2];
+    s.careerPlacesCombined = +careerM[3];
+    // Approximate seconds/thirds split (TAB doesn't break it out: assume 60/40)
+    s.careerSec = Math.round(s.careerPlacesCombined * 0.55);
+    s.careerThd = s.careerPlacesCombined - s.careerSec;
+  }
+  // Win % (integer)
+  const wp = text.match(/Wins\s*\n\s*(\d+)%/);
+  if(wp) s.winPct = parseFloat(wp[1]);
+  const pp = text.match(/Places\s*\n\s*(\d+)%/);
+  if(pp) s.placePct = parseFloat(pp[1]);
+
+  // Last 20 starts -> last-6 form (rightmost 6 digits)
+  const f20 = text.match(/Last 20 starts\s*\n\s*([0-9xX\s]+)/);
+  if(f20){
+    const cleaned = f20[1].replace(/\s+/g,'');
+    if(cleaned){
+      const last6 = cleaned.slice(-6);
+      if(last6) s.formStr = last6;
+    }
+  }
+
+  // Days since last run
+  const ds = text.match(/Last run\s+(\d+)\s+days?\s+ago/i);
+  if(ds) s.daysSince = parseInt(ds[1]);
+
+  // Track / Distance / Trk & Dist (TAB only shows W-P combined, not split)
+  const trkM = text.match(/^Track\s*\n\s*(\d+):\s*(\d+)\s*-\s*(\d+)/m);
+  if(trkM){
+    s.trackStarts = +trkM[1]; s.trackWins = +trkM[2];
+    s.trackPlacesCombined = +trkM[3];
+    s.trackSec = Math.round(s.trackPlacesCombined * 0.55);
+    s.trackThd = s.trackPlacesCombined - s.trackSec;
+  }
+  const distM = text.match(/^Distance\s*\n\s*(\d+):\s*(\d+)\s*-\s*(\d+)/m);
+  if(distM){
+    s.distStarts = +distM[1]; s.distWins = +distM[2];
+    s.distPlacesCombined = +distM[3];
+    s.distSec = Math.round(s.distPlacesCombined * 0.55);
+    s.distThd = s.distPlacesCombined - s.distSec;
+  }
+  const tdM = text.match(/Trk\s*&\s*Dist\s*\n\s*(\d+):\s*(\d+)\s*-\s*(\d+)/);
+  if(tdM){
+    s.tdStarts = +tdM[1]; s.tdWins = +tdM[2];
+    s.tdPlacesCombined = +tdM[3];
+    s.tdSec = Math.round(s.tdPlacesCombined * 0.55);
+    s.tdThd = s.tdPlacesCombined - s.tdSec;
+  }
+
+  // From Box N: today's barrier-specific record
+  const fromBoxM = text.match(/From Box\s+(\d+)\s*\n\s*(\d+):\s*(\d+)\s*-\s*(\d+)/);
+  if(fromBoxM){
+    s.barrier = parseInt(fromBoxM[1]);
+    s.fromBoxStarts = +fromBoxM[2];
+    s.fromBoxWins = +fromBoxM[3];
+    s.fromBoxPlaces = +fromBoxM[4];
+  }
+
+  // 1st/2nd Up
+  const firstUp = text.match(/1st Up\s*\n\s*(\d+):\s*(\d+)\s*-\s*(\d+)/);
+  if(firstUp){ s.firstUp = { starts:+firstUp[1], wins:+firstUp[2], places:+firstUp[3] }; }
+  const secondUp = text.match(/2nd Up\s*\n\s*(\d+):\s*(\d+)\s*-\s*(\d+)/);
+  if(secondUp){ s.secondUp = { starts:+secondUp[1], wins:+secondUp[2], places:+secondUp[3] }; }
+
+  // Prize money
+  const pm = text.match(/Prize Money\s*\n\s*\$?([\d,]+)/);
+  if(pm) s.prizeMoney = parseFloat(pm[1].replace(/,/g,''));
+
+  // Recent races table: tab-separated rows
+  // Format: PLCG \t VENUE \t DATE \t DIST \t CLASS \t WGT \t BOX \t ODDS \t WINNER \t MARGIN \t TIME \t IN RUN
+  s.recentRaces = [];
+  const rowRe = /^(\d+)\/(\d+)\s+([A-Z]{3,5})\s+(\d{1,2}\/\d{1,2}\/\d{2,4})\s+(\d{2,4})\s+([A-Z0-9\s\/]+?)\s+(\d{1,2}\.\d)\s+(\d{1,2})\s+(\d{1,3}(?:\.\d{1,2})?)\s+([A-Z][A-Z'\-\s]+?)\s+(\d{1,3}(?:\.\d)?)\s+(\d{1,2}:\d{2}\.\d{2})(?:\s+([\d\-]+))?/;
+  for(const ln of block.lines){
+    // Try tab-separated first
+    const cols = ln.split(/\t+/).map(c=>c.trim()).filter(Boolean);
+    if(cols.length >= 11){
+      const plMatch = cols[0].match(/^(\d+)\/(\d+)$/);
+      if(plMatch){
+        const inrun = cols.length >= 12 ? cols[11] : '';
+        s.recentRaces.push({
+          place: +plMatch[1], field: +plMatch[2],
+          venue: cols[1], date: cols[2], dist: +cols[3],
+          klass: cols[4], wgt: parseFloat(cols[5])||null,
+          box: parseInt(cols[6])||null, odds: parseFloat(cols[7])||null,
+          winner: cols[8], margin: parseFloat(cols[9])||null,
+          time: cols[10], inrun: inrun
+        });
+        continue;
+      }
+    }
+    // Fallback: regex (whitespace-separated)
+    const m = ln.match(rowRe);
+    if(m){
+      s.recentRaces.push({
+        place: +m[1], field: +m[2], venue: m[3], date: m[4], dist: +m[5],
+        klass: m[6].trim(), wgt: parseFloat(m[7]), box: +m[8],
+        odds: parseFloat(m[9]), winner: m[10].trim(),
+        margin: parseFloat(m[11]), time: m[12], inrun: (m[13]||'').trim()
+      });
+    }
+  }
+
+  // TAB tipster comment (paragraph after literal "TAB" line)
+  const tabIdx = block.lines.findIndex(l => l.trim() === 'TAB');
+  if(tabIdx >= 0 && tabIdx + 1 < block.lines.length){
+    const cm = [];
+    for(let j=tabIdx+1;j<block.lines.length;j++){
+      const ln = block.lines[j].trim();
+      if(!ln) continue;
+      if(/^Add to Blackbook$/i.test(ln)) break;
+      if(/^[A-Z][A-Z'\s]{4,}$/.test(ln) && !/[a-z]/.test(ln)) break;
+      cm.push(ln);
+    }
+    if(cm.length) s.tabComment = cm.join(' ');
+  }
+
+  return s;
+}
+
+/* Compute "early speed" / running-style score from IN RUN sectionals (TAB only).
+   Lower first-sectional position = faster early = better for short sprints.
+   Returns 0-100 (100 = best/leader). */
+function tabRunningStyleScore(stats){
+  if(!stats.recentRaces || !stats.recentRaces.length) return null;
+  // Use up to 5 most recent races
+  const recent = stats.recentRaces.slice(0, 5);
+  let firstSecSum = 0, n = 0;
+  for(const r of recent){
+    if(!r.inrun) continue;
+    const parts = String(r.inrun).split('-').map(p=>parseInt(p)).filter(x=>!isNaN(x));
+    if(!parts.length) continue;
+    const fs = parts[0];           // first sectional position
+    const field = r.field || 8;
+    // normalise: 1st of 8 -> 1.0; last of 8 -> 0.0
+    const norm = Math.max(0, 1 - (fs - 1) / Math.max(1, field - 1));
+    firstSecSum += norm; n++;
+  }
+  if(!n) return null;
+  return Math.round((firstSecSum / n) * 100);
+}
+
+/* From-Box record -> 0..100 score, scaled by sample size confidence. */
+function tabFromBoxScore(stats){
+  if(!stats.fromBoxStarts || stats.fromBoxStarts < 2) return null;
+  const placeRate = (stats.fromBoxWins + stats.fromBoxPlaces) / stats.fromBoxStarts;
+  const winRate   = stats.fromBoxWins / stats.fromBoxStarts;
+  const blended   = winRate * 0.5 + placeRate * 0.5;
+  const conf      = Math.min(1, stats.fromBoxStarts / 8);
+  // baseline 50 + signal pulled toward 100, weighted by confidence
+  return Math.round(50 + (blended * 100 - 50) * conf);
+}
+
+/* Class trend from recent race classes. Returns +1 (dropping), 0, -1 (rising). */
+function tabClassTrend(stats){
+  if(!stats.recentRaces || stats.recentRaces.length < 2) return 0;
+  const rank = (k) => {
+    if(!k) return 5;
+    const u = k.toUpperCase();
+    if(/FFA|GROUP\s*1|G1/.test(u)) return 1;
+    if(/G2|GROUP\s*2/.test(u)) return 2;
+    if(/G3|GROUP\s*3|GR\s*1/.test(u)) return 2;
+    if(/GR\s*2/.test(u)) return 3;
+    if(/GR\s*3/.test(u)) return 4;
+    if(/GR\s*4|MX\s*1\/2|MX\s*2\/3/.test(u)) return 5;
+    if(/GR\s*5|MX\s*3\/4|MX\s*4\/5/.test(u)) return 6;
+    if(/MDN|MAIDEN|NG/.test(u)) return 7;
+    return 5;
+  };
+  const today = stats._todayClass ? rank(stats._todayClass) : null;
+  // compare today to most recent - if today is "easier" rank #, that's a class drop (good)
+  // Without today's class, fallback: compare last race vs avg of prior runs
+  const recent = stats.recentRaces.slice(0, 5).map(r => rank(r.klass));
+  if(today != null){
+    const lastRank = recent[0];
+    if(today > lastRank) return +1; // dropping in class today
+    if(today < lastRank) return -1; // rising
+    return 0;
+  }
+  if(recent.length < 2) return 0;
+  const last = recent[0];
+  const prior = recent.slice(1).reduce((a,b)=>a+b,0)/(recent.length-1);
+  if(last > prior + 0.5) return -1;  // last race was easier than usual -> rising today (proxy)
+  if(last < prior - 0.5) return +1;
+  return 0;
+}
+
+/* =========================================================================
+   RUNNER MATCHING (TAB <-> SB by name)
+   ========================================================================= */
+function canonName(s){
+  return String(s||'').toUpperCase().replace(/[^A-Z0-9]+/g,' ').trim();
+}
+
+function mergeTabSb(sbStats, tabStats){
+  // Build by canonical name
+  const out = [];
+  const byName = new Map();
+  for(const s of sbStats){
+    const k = canonName(s.name);
+    const entry = { no:s.no, name:s.name, barrier:s.barrier, scratched:!!s.scratched, _sb:s, _tab:null };
+    byName.set(k, entry);
+    out.push(entry);
+  }
+  for(const t of tabStats){
+    const k = canonName(t.name);
+    if(byName.has(k)){
+      byName.get(k)._tab = t;
+      // promote barrier from TAB if SB lacked one
+      if(byName.get(k).barrier == null && t.barrier != null) byName.get(k).barrier = t.barrier;
+    } else {
+      // TAB-only runner (no SB header) - use sequential pseudo-number
+      const pseudoNo = out.length ? Math.max(...out.map(x=>x.no||0)) + 1 : 1;
+      const entry = { no: t.barrier || pseudoNo, name:t.name, barrier:t.barrier||null,
+                      scratched:!!t.scratched, _sb:null, _tab:t };
+      byName.set(k, entry);
+      out.push(entry);
+    }
+  }
+  return out;
+}
+
+/* =========================================================================
    STATS -> FACTORS (0-100)
    ========================================================================= */
 function statsToFactors(s, code, all, race){
@@ -640,6 +1012,29 @@ function statsToFactors(s, code, all, race){
   if(code==='thoroughbred' && s.settling){
     if(/Leader/i.test(s.settling)) f.speed = Math.min(100, f.speed+4);
   }
+
+  // ---- TAB-only signal boosts ----
+  // From-Box record (greyhound: today's actual barrier history)
+  const fromBoxScore = tabFromBoxScore(s);
+  if(fromBoxScore != null && code === 'greyhound'){
+    f.box = Math.round((f.box * 0.45) + (fromBoxScore * 0.55));
+  } else if(fromBoxScore != null){
+    f.barrier = Math.round((f.barrier * 0.5) + (fromBoxScore * 0.5));
+  }
+  // Running style from in-run sectionals (greyhound early speed)
+  const runStyle = tabRunningStyleScore(s);
+  if(runStyle != null){
+    if(code === 'greyhound'){
+      f.early = Math.round((f.early * 0.5) + (runStyle * 0.5));
+    } else if(code === 'thoroughbred'){
+      f.speed = Math.round((f.speed * 0.7) + (runStyle * 0.3));
+    }
+  }
+  // Class trend
+  const ct = tabClassTrend(s);
+  if(ct === +1) f.class = Math.min(100, f.class + 5);  // dropping in class
+  if(ct === -1) f.class = Math.max(10, f.class - 5);   // rising in class
+
   return f;
 }
 
@@ -659,11 +1054,22 @@ function smartParse(){
     const code = /^D:\s+/m.test(body) ? 'harness' : (/Greyhound/i.test(body) ? 'greyhound' : 'thoroughbred');
     races.push({code, track:'Unknown', going:'Good', distance:0, raceNo:1, name:'(single race)', body});
   }
-  // parse each race's runners
+  // parse each race's runners (TAB section + Sportsbet section)
   races.forEach(r=>{
-    const blocks = parseRunnerBlocks(r.body);
-    const stats = blocks.map(b=>parseRunnerStats(b, r.code));
-    r.runners = stats;
+    const split = splitTabSbBody(r.body);
+    // SB-format runner blocks
+    const sbBlocks = parseRunnerBlocks(split.sbBody || r.body);
+    const sbStats  = sbBlocks.map(b => parseRunnerStats(b, r.code));
+    // TAB-format runner cards
+    const tabBlocks = parseTABBlocks(split.tabBody);
+    const tabStats  = tabBlocks.map(b => parseTABStats(b));
+    // Merge by canonical name
+    const merged = mergeTabSb(sbStats, tabStats);
+    r.runners    = merged;
+    r.runnersSB  = sbStats;
+    r.runnersTAB = tabStats;
+    r.hasSB      = sbStats.some(x=>!x.scratched);
+    r.hasTAB     = tabStats.some(x=>!x.scratched);
   });
   DETECTED_RACES = races;
 
@@ -696,43 +1102,90 @@ function loadRace(){
   for(let j=0;j<goingSel.options.length;j++){
     if(goingSel.options[j].value.toLowerCase()===r.going.toLowerCase()){ goingSel.selectedIndex=j; break; }
   }
-  // build RUNNERS from stats
-  const stats = r.runners.slice().sort((a,b)=>a.no-b.no);
-  document.getElementById('fieldSize').value = stats.length;
-  RUNNERS = stats.map(st=>{
-    const base = blankRunner(st.no);
-    base.name = st.name;
-    base.scratched = !!st.scratched;
-    base.odds = st.winFixed ? '$'+st.winFixed.toFixed(2) : '';
-    base._stats = st;
+  // build RUNNERS from merged stats; default _stats = combined preference (SB if present, else TAB)
+  const merged = (r.runners || []).slice().sort((a,b)=>(a.no||999)-(b.no||999));
+  document.getElementById('fieldSize').value = merged.length;
+  RUNNERS = merged.map(m=>{
+    const base = blankRunner(m.no || 1);
+    base.name = m.name;
+    base.scratched = !!m.scratched;
+    // prefer TAB Fixed Win odds for display when SB missing
+    const sbWin  = m._sb && m._sb.winFixed;
+    const tabWin = m._tab && m._tab.tabFixedWin;
+    base.odds = sbWin ? '$'+sbWin.toFixed(2) : (tabWin ? '$'+tabWin.toFixed(2) : '');
+    base._stats   = m._sb || m._tab || {};       // legacy single-source view
+    base._statsSB  = m._sb  || null;
+    base._statsTAB = m._tab || null;
+    base._merged  = m;
     return base;
   });
-  // factor mapping (needs all runners for relative comparisons)
-  RUNNERS.forEach(r0=>{
-    if(r0.scratched) return;
-    r0.f = statsToFactors(r0._stats, r.code, RUNNERS.map(x=>x._stats||{}), r);
-  });
+  // Pre-compute factors for all three sources so the engine can run them on demand
+  rebuildFactorsAllSources(r);
   renderField();
   if(document.getElementById('autoRun').checked) runEngine();
+}
+
+/* For a given race, rebuild f / fSB / fTAB / fCombined on every runner. */
+function rebuildFactorsAllSources(race){
+  const allMerged = RUNNERS.map(r=>r._merged||{});
+  const allStats  = RUNNERS.map(r=>r._stats||{});
+  const allSB     = RUNNERS.map(r=>r._statsSB || {});
+  const allTAB    = RUNNERS.map(r=>r._statsTAB|| {});
+  RUNNERS.forEach(r0=>{
+    if(r0.scratched){ r0.fSB = null; r0.fTAB = null; r0.fCombined = null; return; }
+    const sb  = r0._statsSB;
+    const tab = r0._statsTAB;
+    r0.fSB  = sb  ? statsToFactors(sb,  race.code, allSB,  race) : null;
+    r0.fTAB = tab ? statsToFactors(tab, race.code, allTAB, race) : null;
+    // Combined: union of stats (TAB fills SB gaps), then re-factor
+    const merged = mergeStats(sb, tab);
+    r0.fCombined = statsToFactors(merged, race.code, allStats, race);
+    r0.f = r0.fCombined;     // default editor view = combined
+    r0._statsCombined = merged;
+  });
+}
+
+/* Merge two source stats objects: SB takes priority, TAB fills missing keys
+   plus contributes TAB-only signals (recentRaces, fromBox, tabComment). */
+function mergeStats(sb, tab){
+  const out = Object.assign({}, tab||{}, sb||{});  // SB overrides scalar duplicates
+  if(tab){
+    // Always carry TAB-only signals through
+    if(tab.recentRaces && tab.recentRaces.length) out.recentRaces = tab.recentRaces;
+    if(tab.fromBoxStarts) {
+      out.fromBoxStarts = tab.fromBoxStarts;
+      out.fromBoxWins   = tab.fromBoxWins;
+      out.fromBoxPlaces = tab.fromBoxPlaces;
+    }
+    if(tab.tabComment) out.tabComment = tab.tabComment;
+    // Use TAB fixed-win odds if SB missing
+    if(!out.winFixed && tab.tabFixedWin) out.winFixed = tab.tabFixedWin;
+    // Better form string from Last 20 starts if SB missing
+    if(!out.formStr && tab.formStr) out.formStr = tab.formStr;
+  }
+  return out;
 }
 
 /* =========================================================================
    SCORING
    ========================================================================= */
-function computeStrengths(){
+function computeStrengths(source){
+  // source: 'combined' | 'tab' | 'sb'
   const code = document.getElementById('code').value;
   const factors = FACTORS[code];
   const wsum = factors.reduce((a,f)=>a+f.w,0);
   const out = [];
   for(const r of RUNNERS){
     if(r.scratched) continue;
+    const fset = source==='tab' ? r.fTAB : (source==='sb' ? r.fSB : r.fCombined);
+    if(!fset) continue;     // runner not present in this source
     let s=0;
     for(const f of factors){
-      const v = Math.max(0, Math.min(100, +r.f[f.k] || 0));
+      const v = Math.max(0, Math.min(100, +fset[f.k] || 0));
       s += v * f.w;
     }
     s = s / wsum;
-    out.push({...r, score:s});
+    out.push({...r, score:s, _activeFactors:fset});
   }
   return out;
 }
@@ -802,11 +1255,21 @@ function valueBadge(modelP, sbOdds){
 
 function runEngine(){
   if(!RUNNERS.length){ alert('Build a field or paste/parse first.'); return; }
-  const scored = computeStrengths();
-  if(scored.length<2){ alert('Need at least 2 active runners.'); return; }
   const T = parseFloat(document.getElementById('temp').value);
   const sims = parseInt(document.getElementById('sims').value);
 
+  LAST_RESULTS = { combined: null, tab: null, sb: null };
+  LAST_RESULTS.combined = computeSourceResults('combined', T, sims);
+  LAST_RESULTS.tab      = computeSourceResults('tab',      T, sims);
+  LAST_RESULTS.sb       = computeSourceResults('sb',       T, sims);
+
+  renderAgreementPanel();
+  renderActiveSourceResults();
+}
+
+function computeSourceResults(source, T, sims){
+  const scored = computeStrengths(source);
+  if(scored.length < 2) return null;
   const probs = softmax(scored, T);
   const strengths = probs.map(p=>Math.max(p,1e-6));
   const mc = runMonteCarlo(strengths, sims);
@@ -817,6 +1280,54 @@ function runEngine(){
     odds:r.odds, idx:i
   })).sort((a,b)=>b.p-a.p);
 
+  const exArr = [...mc.exa.entries()].map(([k,v])=>{
+    const [a,b] = k.split('-').map(Number);
+    return {a,b,p:v/sims};
+  }).sort((x,y)=>y.p-x.p);
+
+  const f4Arr = [...mc.f4.entries()].map(([k,v])=>{
+    const ix = k.split('-').map(Number);
+    return {ix, p:v/sims};
+  }).sort((x,y)=>y.p-x.p);
+
+  return { source, scored, winRows, exArr, f4Arr, mc, sims };
+}
+
+function setSourceTab(src){
+  ACTIVE_SOURCE = src;
+  ['combined','tab','sb'].forEach(s=>{
+    const id = s==='combined' ? 'tabBtnCombined' : (s==='tab' ? 'tabBtnTab' : 'tabBtnSB');
+    const btn = document.getElementById(id);
+    if(btn) btn.classList.toggle('active', s===src);
+  });
+  const lbl = document.getElementById('srcLabel');
+  if(lbl){
+    lbl.className = 'src-pill ' + (src==='combined' ? 'combined' : src);
+    lbl.textContent = src==='combined' ? 'Combined' : (src==='tab' ? 'TAB only' : 'Sportsbet only');
+  }
+  renderActiveSourceResults();
+}
+
+function renderActiveSourceResults(){
+  const res = LAST_RESULTS[ACTIVE_SOURCE];
+  const empty = document.getElementById('srcEmpty');
+  const meta  = document.getElementById('tabMeta');
+  if(!res){
+    if(empty) empty.innerHTML = `<div class="src-empty">No <b>${ACTIVE_SOURCE === 'sb' ? 'Sportsbet' : ACTIVE_SOURCE.toUpperCase()}</b> data parsed for this race. Paste a section that contains it, then re-run.</div>`;
+    document.getElementById('winTable').innerHTML = '';
+    document.getElementById('exTable').innerHTML  = '';
+    document.getElementById('f4Table').innerHTML  = '';
+    document.getElementById('tickets').innerHTML  = '<div class="small">Run the engine to generate boxed/standout tickets.</div>';
+    if(meta) meta.textContent = 'No data for this source.';
+    return;
+  }
+  if(empty) empty.innerHTML = '';
+  if(meta) meta.textContent = `${res.scored.length} runners scored - ${res.sims.toLocaleString()} sims.`;
+  renderResultsTo(res);
+}
+
+function renderResultsTo(res){
+  const winRows = res.winRows;
   let html = '<thead><tr><th>Rank</th><th>#</th><th>Name</th><th>Score</th><th>Win %</th><th>Top-3 %</th><th>Fair $</th><th>SB $</th><th>Edge</th></tr></thead><tbody>';
   winRows.forEach((r,i)=>{
     html += `<tr>
@@ -834,15 +1345,12 @@ function runEngine(){
   document.getElementById('winTable').innerHTML = html+'</tbody>';
 
   const topEx = parseInt(document.getElementById('topExacta').value)||15;
-  const exArr = [...mc.exa.entries()].map(([k,v])=>{
-    const [a,b] = k.split('-').map(Number);
-    return {a,b,p:v/sims};
-  }).sort((x,y)=>y.p-x.p).slice(0,topEx);
+  const exArr = res.exArr.slice(0, topEx);
   let cum=0;
   let eh='<thead><tr><th>#</th><th>Combo</th><th>Prob</th><th>Fair $</th><th>Cum %</th></tr></thead><tbody>';
   exArr.forEach((c,i)=>{
     cum += c.p;
-    const ra = scored[c.a], rb = scored[c.b];
+    const ra = res.scored[c.a], rb = res.scored[c.b];
     eh += `<tr>
       <td>${i+1}</td>
       <td><span class="runner-no">${ra.no}</span> &gt; <span class="runner-no">${rb.no}</span> <span class="small">(${escapeHtml(ra.name)} / ${escapeHtml(rb.name)})</span></td>
@@ -855,18 +1363,15 @@ function runEngine(){
 
   const topF4 = parseInt(document.getElementById('topF4').value)||20;
   let fh='<thead><tr><th>#</th><th>Combo</th><th>Prob</th><th>Fair $</th><th>Cum %</th></tr></thead><tbody>';
-  if(scored.length<4){
+  if(res.scored.length<4){
     fh = '<tbody><tr><td>Need at least 4 active runners for First 4.</td></tr>';
   } else {
-    const f4Arr = [...mc.f4.entries()].map(([k,v])=>{
-      const ix = k.split('-').map(Number);
-      return {ix, p:v/sims};
-    }).sort((x,y)=>y.p-x.p).slice(0,topF4);
-    cum=0;
+    const f4Arr = res.f4Arr.slice(0, topF4);
+    cum = 0;
     f4Arr.forEach((c,i)=>{
       cum += c.p;
-      const labels = c.ix.map(j=>`<span class="runner-no">${scored[j].no}</span>`).join(' &gt; ');
-      const names = c.ix.map(j=>scored[j].name).join(' / ');
+      const labels = c.ix.map(j=>`<span class="runner-no">${res.scored[j].no}</span>`).join(' &gt; ');
+      const names  = c.ix.map(j=>res.scored[j].name).join(' / ');
       fh += `<tr>
         <td>${i+1}</td>
         <td>${labels} <span class="small">(${escapeHtml(names)})</span></td>
@@ -918,6 +1423,49 @@ function runEngine(){
       Stake to the model edge, not blindly. If your top pick has Win % well above SportsBet's implied % (see Edge column), the win is the value play; otherwise prefer exotics.
     </div>`;
   document.getElementById('tickets').innerHTML = ticketHtml;
+}
+
+/* Combined view: render TAB vs SB agreement summary at the top. */
+function renderAgreementPanel(){
+  const tab = LAST_RESULTS.tab;
+  const sb  = LAST_RESULTS.sb;
+  const cmb = LAST_RESULTS.combined;
+  const wrap = document.getElementById('agreementPanel');
+  if(!wrap) return;
+  if(ACTIVE_SOURCE !== 'combined' || !cmb){ wrap.innerHTML = ''; return; }
+  if(!tab && !sb){
+    wrap.innerHTML = '<div class="src-empty">Only one source detected - combined view falls back to that source.</div>';
+    return;
+  }
+  if(!tab || !sb){
+    const which = tab ? 'TAB' : 'Sportsbet';
+    wrap.innerHTML = `<div class="src-empty">Only <b>${which}</b> data parsed - combined uses it directly. Paste both sources to compare.</div>`;
+    return;
+  }
+  const tabTop = tab.winRows[0];
+  const sbTop  = sb.winRows[0];
+  const agree  = tabTop && sbTop && tabTop.no === sbTop.no;
+  const tab3   = new Set(tab.winRows.slice(0,3).map(r=>r.no));
+  const sb3    = new Set(sb.winRows.slice(0,3).map(r=>r.no));
+  const overlap3 = [...tab3].filter(n=>sb3.has(n));
+  wrap.innerHTML = `
+    <div class="agree-grid">
+      <div class="agree-card ${agree?'match':'mismatch'}">
+        <div class="lbl">Top pick agreement</div>
+        <div class="val">
+          ${agree
+            ? `&#10003; Both rate <b>#${tabTop.no} ${escapeHtml(tabTop.name)}</b> as the winner.`
+            : `Disagreement: TAB likes <b>#${tabTop.no} ${escapeHtml(tabTop.name)}</b> &middot; Sportsbet likes <b>#${sbTop.no} ${escapeHtml(sbTop.name)}</b>.`}
+        </div>
+      </div>
+      <div class="agree-card ${overlap3.length>=2?'match':'mismatch'}">
+        <div class="lbl">Top-3 overlap</div>
+        <div class="val">
+          ${overlap3.length} of 3 shared:
+          ${overlap3.length ? overlap3.map(n=>`<span class="chip">#${n}</span>`).join('') : '<i>none</i>'}
+        </div>
+      </div>
+    </div>`;
 }
 
 /* INIT */
