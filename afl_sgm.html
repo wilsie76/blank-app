@@ -1,0 +1,901 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>AFL SGM Edge - 15-Leg Same Game Multi Optimiser</title>
+<style>
+  :root{
+    --bg:#0b1020; --panel:#121833; --panel2:#1a2247; --ink:#e8ecff; --muted:#8b94c2;
+    --accent:#7c5cff; --accent2:#22d3ee; --good:#22c55e; --warn:#f59e0b; --bad:#ef4444;
+    --border:#2a3160;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:linear-gradient(180deg,#070a1a 0%,#0b1020 100%);color:var(--ink);font-family:-apple-system,Segoe UI,Roboto,Inter,sans-serif}
+  header{padding:20px 28px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:rgba(10,14,32,.7);backdrop-filter:blur(8px);position:sticky;top:0;z-index:10}
+  header h1{margin:0;font-size:22px;letter-spacing:.5px}
+  header .tag{font-size:12px;color:var(--muted);margin-top:2px}
+  .pill{display:inline-block;padding:3px 10px;border-radius:999px;background:#21285a;color:#cdd3ff;font-size:11px;margin-left:8px}
+  main{max-width:1500px;margin:0 auto;padding:24px;display:grid;gap:20px;grid-template-columns:380px 1fr}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:18px}
+  .card h2{margin:0 0 12px 0;font-size:15px;letter-spacing:.4px;color:#cdd3ff;text-transform:uppercase}
+  label{display:block;font-size:12px;color:var(--muted);margin:10px 0 4px}
+  input,select,textarea,button{font:inherit;color:var(--ink);background:#0e1430;border:1px solid var(--border);border-radius:8px;padding:8px 10px;width:100%}
+  textarea{min-height:160px;resize:vertical;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px}
+  button{cursor:pointer;background:linear-gradient(180deg,var(--accent),#5a3fdc);border-color:#5a3fdc;font-weight:600}
+  button.ghost{background:#0e1430;border:1px solid var(--border)}
+  button.warn{background:linear-gradient(180deg,#f59e0b,#b3700a);border-color:#b3700a;color:#1a1100}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  .row{display:flex;gap:8px}
+  .row > *{flex:1}
+  table{width:100%;border-collapse:collapse;font-size:12px}
+  th,td{padding:6px 8px;border-bottom:1px solid var(--border);text-align:left;white-space:nowrap}
+  th{color:#a7b0e0;font-weight:600;position:sticky;top:0;background:var(--panel);cursor:pointer;user-select:none}
+  th.sorted::after{content:' \25BC';color:var(--accent2)}
+  th.sorted-asc::after{content:' \25B2';color:var(--accent2)}
+  td input[type=checkbox]{width:16px;height:16px;cursor:pointer}
+  tr.picked{background:rgba(124,92,255,.10)}
+  tr:hover{background:rgba(255,255,255,.03)}
+  .scroll{overflow:auto;max-height:560px;border:1px solid var(--border);border-radius:10px}
+  .badge{display:inline-block;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700}
+  .b-good{background:rgba(34,197,94,.15);color:#86efac;border:1px solid #1f6f3f}
+  .b-warn{background:rgba(245,158,11,.15);color:#fcd34d;border:1px solid #7a560a}
+  .b-bad{background:rgba(239,68,68,.15);color:#fca5a5;border:1px solid #7a1f1f}
+  .b-muted{background:#21285a;color:#cdd3ff}
+  .small{font-size:11px;color:var(--muted)}
+  .footer{font-size:11px;color:var(--muted);text-align:center;padding:18px}
+  .hint{background:rgba(124,92,255,.08);border:1px dashed #5a3fdc;border-radius:10px;padding:10px;font-size:12px;color:#cdd3ff;margin-bottom:10px}
+  .alert{background:rgba(239,68,68,.1);border:1px solid #7a1f1f;border-radius:10px;padding:8px 10px;font-size:12px;color:#fecaca;margin-top:8px}
+  .alert.warn{background:rgba(245,158,11,.10);border-color:#7a560a;color:#fcd34d}
+  .metrics{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:8px}
+  .metric{background:#0e1430;border:1px solid var(--border);border-radius:10px;padding:10px}
+  .metric .lbl{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+  .metric .val{font-size:22px;font-weight:800;letter-spacing:.5px;margin-top:2px}
+  .metric.good .val{color:#86efac}
+  .metric.bad .val{color:#fca5a5}
+  .metric.warn .val{color:#fcd34d}
+  .toolbar{display:flex;gap:10px;align-items:center;margin-bottom:10px;flex-wrap:wrap}
+  .toolbar > *{flex:0 0 auto}
+  .toolbar input[type=number],.toolbar select{width:110px}
+  .seg{display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden}
+  .seg button{flex:0 0 auto;width:auto;padding:8px 14px;border-radius:0;border:none;background:#0e1430;color:var(--muted);font-weight:600;font-size:12px;letter-spacing:.4px;text-transform:uppercase}
+  .seg button.active{background:linear-gradient(180deg,var(--accent),#5a3fdc);color:var(--ink)}
+  .legchip{display:inline-block;padding:4px 9px;border-radius:8px;background:#21285a;color:#cdd3ff;font-size:11px;margin:2px}
+  .ladder-row{display:grid;grid-template-columns:50px 1fr 100px 90px 80px 80px;gap:8px;padding:8px 10px;border-bottom:1px solid var(--border);font-size:12px;align-items:center}
+  .ladder-row:hover{background:rgba(255,255,255,.03)}
+  .ladder-row .legs{font-weight:700;color:var(--accent2)}
+  .ladder-row .pct{font-weight:700}
+  .barwrap{height:5px;background:#0a1029;border-radius:3px;overflow:hidden;margin-top:3px}
+  .barwrap > span{display:block;height:100%;background:linear-gradient(90deg,var(--good),var(--accent2))}
+  @media(max-width:1100px){main{grid-template-columns:1fr}.metrics{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>AFL SGM Edge <span class="pill">15-Leg Optimiser</span></h1>
+    <div class="tag">Banker mode = max P(SGM wins). Value mode = max EV. Form-based model with correlation discount.</div>
+  </div>
+  <div class="small">v1.0</div>
+</header>
+
+<main>
+  <!-- LEFT: Smart paste & controls -->
+  <section>
+    <div class="card">
+      <h2>1. Smart Paste</h2>
+      <div class="hint">
+        Paste the entire <b>Hot Legs</b> section from your bookie's match page
+        (Sportsbet, TAB, etc.). The parser pulls out every player prop with
+        last-5 form, the H2H markets, and the prices.
+      </div>
+      <textarea id="paste" placeholder="9&#10;Max Holmes&#10;25+ Disposals&#10;28&#10;25&#10;29&#10;33&#10;26&#10;&#10;1.65&#10;..."></textarea>
+      <div class="row" style="margin-top:8px">
+        <button onclick="parseInput()">Parse paste</button>
+        <button class="ghost" onclick="clearAll()">Clear</button>
+      </div>
+      <div id="parseStatus" class="small" style="margin-top:8px"></div>
+    </div>
+
+    <div class="card" style="margin-top:16px">
+      <h2>2. Optimiser</h2>
+      <label>Mode</label>
+      <div class="seg" style="display:flex;width:100%">
+        <button id="modeBanker" class="active" onclick="setMode('banker')" style="flex:1">Banker (max P win)</button>
+        <button id="modeValue" onclick="setMode('value')" style="flex:1">Value (max EV)</button>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <div>
+          <label>Target legs</label>
+          <input id="targetLegs" type="number" min="3" max="15" value="15" />
+        </div>
+        <div>
+          <label>Min book $ (Banker)</label>
+          <input id="minBookPrice" type="number" min="1.5" step="0.5" value="3.0" />
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label>Min leg EV %</label>
+          <input id="minLegEv" type="number" step="1" value="-10" />
+        </div>
+        <div>
+          <label>Vig per leg %</label>
+          <input id="vig" type="number" step="0.5" value="4.0" />
+        </div>
+      </div>
+      <button style="margin-top:14px" onclick="autoBuild()">Auto-build SGM</button>
+      <button class="ghost" style="margin-top:6px" onclick="clearSelection()">Clear selection</button>
+    </div>
+
+    <div class="card" style="margin-top:16px">
+      <h2>3. Help</h2>
+      <div class="small" style="line-height:1.5">
+        <b style="color:var(--ink)">Banker</b> = max probability the SGM cashes.
+        Picks the safest legs that still give a payout above your floor.<br><br>
+        <b style="color:var(--ink)">Value</b> = max expected value.
+        Hunts genuine model-vs-market edges; higher variance.<br><br>
+        <b style="color:var(--ink)">Model %</b> blends form-based Gaussian
+        on last-5 with the de-vigged market price.<br><br>
+        <b style="color:var(--ink)">Est book $</b> approximates Sportsbet's
+        SGM quote after correlation discount. Compare to the actual quote
+        before betting.
+      </div>
+    </div>
+  </section>
+
+  <!-- RIGHT: Legs + SGM result -->
+  <section>
+    <div class="card">
+      <h2>Legs <span id="legsCount" class="small"></span></h2>
+      <div class="toolbar">
+        <input id="filterText" placeholder="Filter player or market..." oninput="renderLegs()" style="flex:1;min-width:160px" />
+        <select id="filterMarket" onchange="renderLegs()">
+          <option value="">All markets</option>
+          <option value="disposals">Disposals</option>
+          <option value="goals">Goals</option>
+          <option value="fantasy">Fantasy</option>
+          <option value="marks">Marks</option>
+          <option value="tackles">Tackles</option>
+          <option value="kicks">Kicks</option>
+          <option value="handballs">Handballs</option>
+          <option value="hitouts">Hitouts</option>
+          <option value="h2h">H2H</option>
+        </select>
+        <span class="small" id="selCount"></span>
+      </div>
+      <div class="scroll">
+        <table id="legsTable"></table>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:16px">
+      <h2>Combined SGM</h2>
+      <div class="metrics">
+        <div class="metric"><div class="lbl">Legs</div><div class="val" id="mLegs">0</div></div>
+        <div class="metric good"><div class="lbl">P(win)</div><div class="val" id="mProb">-</div></div>
+        <div class="metric"><div class="lbl">Est book $</div><div class="val" id="mBook">-</div></div>
+        <div class="metric"><div class="lbl">Fair $ (model)</div><div class="val" id="mFair">-</div></div>
+        <div class="metric warn"><div class="lbl">Model EV</div><div class="val" id="mEv">-</div></div>
+      </div>
+      <div class="small" id="extraInfo"></div>
+      <div id="warningPanel"></div>
+      <table id="selectedTable" style="margin-top:10px"></table>
+    </div>
+
+    <div class="card" style="margin-top:16px">
+      <h2>Ticket Ladder</h2>
+      <div class="small" style="margin-bottom:8px">
+        Re-runs the optimiser at multiple leg counts so you can see the
+        prob/price tradeoff. Click a row to load that ticket into the table above.
+      </div>
+      <div id="ladderHead" class="ladder-row" style="font-weight:700;color:var(--muted);text-transform:uppercase;font-size:11px;border-bottom:1px solid var(--accent)">
+        <div>Legs</div><div></div><div>P(win)</div><div>Est book $</div><div>Fair $</div><div>EV %</div>
+      </div>
+      <div id="ladderBody"></div>
+    </div>
+  </section>
+</main>
+
+<div class="footer">
+  AFL SGM Edge is a probabilistic model. The bookmaker's true correlation matrix is private; estimated prices are approximations. Always verify against the actual SGM quote before betting.
+</div>
+
+<script>
+/* =============================================================================
+   ENGINE -- direct port of the afl_sgm Python module
+   ============================================================================= */
+
+/* ---- schema constants ---- */
+const PLAYER_STAT_MARKETS = new Set(['disposals','goals','fantasy','marks','tackles','kicks','handballs','hitouts','clearances']);
+const RELATED_MARKETS = {
+  disposals:  {kicks:0.85, handballs:0.80, fantasy:0.80, marks:0.45, tackles:0.30},
+  kicks:      {disposals:0.85, fantasy:0.65, marks:0.50},
+  handballs:  {disposals:0.80, fantasy:0.55, clearances:0.40},
+  fantasy:    {disposals:0.80, marks:0.55, tackles:0.45, goals:0.40, hitouts:0.50},
+  marks:      {disposals:0.45, fantasy:0.55, goals:0.30},
+  tackles:    {disposals:0.30, fantasy:0.45, clearances:0.35},
+  goals:      {fantasy:0.40, marks:0.30},
+  hitouts:    {fantasy:0.50, clearances:0.25},
+  clearances: {handballs:0.40, tackles:0.35, hitouts:0.25},
+};
+const STAT_WORDS = {disposal:'disposals', goal:'goals', fantasy:'fantasy', mark:'marks', tackle:'tackles', kick:'kicks', handball:'handballs', hitout:'hitouts', clearance:'clearances'};
+
+/* ---- parser ---- */
+const NOISE = new Set([
+  'all','popular','hot legs','same game multi','match preview',
+  'top markets','show all','show less','show more',
+  'new player most groups','pick your own disposals','disposal markets',
+  'pick your own goals','goal scorer markets','player afl fantasy',
+  'player marks','player tackles','player kicks','player handballs',
+  'player hitouts','player clearances','player goal combos','player disposal combos',
+  'match goals in every quarter','team goals in every quarter','quick bet markets',
+  'margin markets','handicap markets','total points markets','total goals markets',
+  '1st and last to score markets','"1st to" markets','quarter/half markets','doubles markets',
+  'pick your line','pick your own total','head to head',
+  'disposals','goals','fantasy points','hitouts','marks','tackles','kicks','handballs','clearances',
+  'first disposal','1st goal','1st or 2nd goal','1st, 2nd or 3rd goal',
+  'big win little win','line','total game points - over/under',
+]);
+const PRICE_RE = /^\$?(\d{1,4}(?:\.\d{1,2}))$/;
+const THRESHOLD_RE = /^(\d+)\+\s+([A-Za-z][A-Za-z ]+?)s?$/;
+const INT_RE = /^\d{1,3}$/;
+
+function isNoise(line){
+  const low = line.toLowerCase();
+  if(NOISE.has(low)) return true;
+  if(/^\d{1,2}[hms]$/.test(low)) return true;
+  return false;
+}
+
+function classifyMarket(line){
+  const m = THRESHOLD_RE.exec(line);
+  if(!m) return null;
+  const threshold = parseFloat(m[1]);
+  let stat = m[2].trim().toLowerCase();
+  stat = stat.replace(/\s+points?$/, '').trim();
+  if(stat.endsWith('s') && STAT_WORDS[stat.slice(0,-1)]) stat = stat.slice(0,-1);
+  if(STAT_WORDS[stat]) return {market: STAT_WORDS[stat], threshold};
+  return null;
+}
+
+function legId(...parts){
+  // simple djb2-ish hash; shortened for IDs
+  const s = parts.filter(p => p != null).map(p => String(p).toLowerCase()).join('|');
+  let h = 5381;
+  for(let i = 0; i < s.length; i++){ h = ((h << 5) + h + s.charCodeAt(i)) | 0; }
+  return (h >>> 0).toString(16).padStart(8,'0').slice(0,10);
+}
+
+function buildPlayerLeg(buf, price){
+  if(buf.length < 7) return null;
+  const history = buf.slice(-5);
+  const marketLine = buf[buf.length - 6];
+  if(!history.every(h => INT_RE.test(h))) return null;
+  const mm = classifyMarket(marketLine);
+  if(!mm) return null;
+  let jersey = null, name;
+  if(buf.length >= 8 && INT_RE.test(buf[buf.length - 8])){
+    jersey = parseInt(buf[buf.length - 8]);
+    name = buf[buf.length - 7];
+  } else {
+    name = buf[buf.length - 7];
+  }
+  if(!name || isNoise(name)) return null;
+  if(!/[A-Za-z]/.test(name) || /\d/.test(name)) return null;
+  const hist = history.map(h => parseFloat(h));
+  return {
+    leg_id: legId(name, mm.market, mm.threshold),
+    leg_type: 'player_threshold',
+    description: `${name} ${marketLine}`,
+    player: name, jersey, team: null,
+    market: mm.market, threshold: mm.threshold,
+    history: hist, price,
+    hits: 0, n_games: 0, raw_hit_rate: 0, model_prob: 0, ev_pct: 0, confidence: 0, flags: [],
+  };
+}
+
+function buildH2HLeg(buf, price){
+  if(buf.length < 7) return null;
+  const history = buf.slice(-5);
+  const marketLine = buf[buf.length - 6];
+  if(marketLine.toLowerCase() !== 'head to head') return null;
+  if(!history.every(h => h === 'W' || h === 'L' || h === 'D')) return null;
+  const team = buf[buf.length - 7];
+  if(!team || !/[A-Za-z]/.test(team)) return null;
+  return {
+    leg_id: legId(team, 'h2h'),
+    leg_type: 'team_h2h',
+    description: `${team} to win (H2H)`,
+    player: null, jersey: null, team,
+    market: 'h2h', threshold: null,
+    history, price,
+    hits: 0, n_games: 0, raw_hit_rate: 0, model_prob: 0, ev_pct: 0, confidence: 0, flags: [],
+  };
+}
+
+function flushBlock(buf, price){
+  return buildPlayerLeg(buf, price) || buildH2HLeg(buf, price);
+}
+
+function parsePaste(text){
+  const lines = text.normalize('NFKC').replace(/\xa0/g, ' ').split('\n').map(l => l.trim());
+  const legs = [];
+  const seen = new Set();
+  let buf = [];
+  let expectingPrice = false;
+
+  for(const raw of lines){
+    const line = raw.trim();
+    if(expectingPrice){
+      const m = PRICE_RE.exec(line);
+      if(m){
+        const price = parseFloat(m[1]);
+        if(price > 1.0){
+          const leg = flushBlock(buf, price);
+          if(leg && !seen.has(leg.leg_id)){ legs.push(leg); seen.add(leg.leg_id); }
+        }
+        buf = []; expectingPrice = false;
+        continue;
+      } else {
+        buf = []; expectingPrice = false;
+        if(line && !isNoise(line)) buf.push(line);
+        continue;
+      }
+    }
+    if(line === ''){
+      if(buf.length >= 6) expectingPrice = true;
+      else buf = [];
+      continue;
+    }
+    if(isNoise(line)){
+      if(line.toLowerCase() === 'head to head' && buf.length && /[A-Za-z]/.test(buf[buf.length-1])){
+        buf.push(line);
+      } else {
+        buf = [];
+      }
+      continue;
+    }
+    buf.push(line);
+  }
+  return legs;
+}
+
+/* ---- model: Beta-blended Gaussian + market-prior ---- */
+const PROB_MIN = 0.05, PROB_MAX = 0.97;
+const SIGMA_FLOOR = 0.5;
+const DEFAULT_PRIOR_STRENGTH = 4.0;
+
+function normalCdf(z){
+  // erf approximation (Abramowitz & Stegun 7.1.26)
+  const sign = z < 0 ? -1 : 1;
+  const ax = Math.abs(z) / Math.sqrt(2);
+  const t = 1.0 / (1.0 + 0.3275911 * ax);
+  const a1=0.254829592, a2=-0.284496736, a3=1.421413741, a4=-1.453152027, a5=1.061405429;
+  const y = 1.0 - (((((a5*t + a4)*t) + a3)*t + a2)*t + a1)*t * Math.exp(-ax*ax);
+  return 0.5 * (1.0 + sign * y);
+}
+function clip(x, lo, hi){ return Math.max(lo, Math.min(hi, x)); }
+function clipProb(x){ return clip(x, PROB_MIN, PROB_MAX); }
+function marketImplied(price, vig){
+  if(price <= 1.0) return 0.99;
+  const raw = 1.0 / price;
+  return clip(raw / (1.0 + vig), 0.01, 0.99);
+}
+function evPct(p, price){ return (p * price - 1.0) * 100.0; }
+
+function mean(arr){ return arr.reduce((a,b)=>a+b,0) / arr.length; }
+function stdev(arr){
+  if(arr.length < 2) return 0;
+  const mu = mean(arr);
+  const v = arr.reduce((a,b)=> a + (b-mu)*(b-mu), 0) / (arr.length - 1);
+  return Math.sqrt(v);
+}
+
+function scoreH2H(leg, vig){
+  const hist = leg.history.filter(h => h==='W'||h==='L'||h==='D');
+  const n = hist.length;
+  const hits = hist.filter(h => h === 'W').length;
+  leg.hits = hits; leg.n_games = n; leg.raw_hit_rate = n ? hits/n : 0;
+  const mP = marketImplied(leg.price, vig);
+  if(n){
+    const betaP = (2.0 + hits) / (4.0 + n);
+    leg.model_prob = clipProb(0.7 * mP + 0.3 * betaP);
+  } else {
+    leg.model_prob = clipProb(mP);
+  }
+  leg.confidence = n ? Math.abs(2 * leg.raw_hit_rate - 1) : 0.3;
+  leg.ev_pct = evPct(leg.model_prob, leg.price);
+  if(n < 5) leg.flags.push('partial form sample');
+}
+
+function scorePlayerThreshold(leg, priorStrength, vig){
+  if(!leg.history || leg.history.length === 0 || leg.threshold == null){
+    leg.model_prob = marketImplied(leg.price, vig);
+    leg.confidence = 0.2;
+    leg.ev_pct = evPct(leg.model_prob, leg.price);
+    leg.flags.push('no history');
+    return;
+  }
+  const nums = leg.history.map(Number);
+  const n = nums.length;
+  const threshold = leg.threshold;
+  const hits = nums.filter(v => v >= threshold).length;
+  leg.hits = hits; leg.n_games = n; leg.raw_hit_rate = hits / n;
+  let mu, sigma;
+  if(n >= 2){ mu = mean(nums); sigma = Math.max(stdev(nums), SIGMA_FLOOR); }
+  else { mu = nums[0]; sigma = Math.max(mu * 0.25, SIGMA_FLOOR); }
+  const adj = threshold - 0.5;
+  const z = (adj - mu) / sigma;
+  let pForm = 1 - normalCdf(z);
+  pForm = clip(pForm, 0.02, 0.98);
+  const mP = marketImplied(leg.price, vig);
+  const blended = (priorStrength * mP + n * pForm) / (priorStrength + n);
+  leg.model_prob = clipProb(blended);
+
+  const cv = sigma / Math.max(Math.abs(mu), 1.0);
+  const consistency = Math.max(0, 1.0 - cv);
+  const zStrength = Math.min(1.0, Math.abs(z) / 1.5);
+  leg.confidence = Math.round((Math.max(0.15, 0.5 * consistency + 0.5 * zStrength)) * 1000) / 1000;
+
+  if(n < 5) leg.flags.push('partial form sample');
+  if(hits === 0) leg.flags.push('0 hits in last 5');
+  else if(hits === n && threshold <= mu * 0.5) leg.flags.push('threshold trivially below mean');
+  if(cv > 0.6) leg.flags.push('volatile form');
+  leg.ev_pct = evPct(leg.model_prob, leg.price);
+}
+
+function scoreLeg(leg, priorStrength, vig){
+  leg.flags = [];
+  if(leg.leg_type === 'team_h2h' || leg.market === 'h2h') scoreH2H(leg, vig);
+  else if(PLAYER_STAT_MARKETS.has(leg.market)) scorePlayerThreshold(leg, priorStrength, vig);
+  else {
+    leg.model_prob = marketImplied(leg.price, vig);
+    leg.confidence = 0.2;
+    leg.ev_pct = evPct(leg.model_prob, leg.price);
+    leg.flags.push('unknown market');
+  }
+  return leg;
+}
+
+function scoreAllLegs(legs, priorStrength=DEFAULT_PRIOR_STRENGTH, vig=0.04){
+  for(const leg of legs) scoreLeg(leg, priorStrength, vig);
+  return legs;
+}
+
+/* ---- correlation ---- */
+const SAME_PLAYER_DEFAULT_RHO = 0.40;
+const NEUTRAL_RHO = 0.0;
+const H2H_PLAYER_RHO = 0.30;
+
+function pairCorrelation(a, b){
+  if(a.leg_id === b.leg_id) return 1.0;
+  const aPlayer = a.leg_type === 'player_threshold';
+  const bPlayer = b.leg_type === 'player_threshold';
+  if(aPlayer && bPlayer && a.player && b.player &&
+     a.player.toLowerCase() === b.player.toLowerCase() &&
+     a.market === b.market) return 1.0;
+  if(aPlayer && bPlayer && a.player && b.player &&
+     a.player.toLowerCase() === b.player.toLowerCase()){
+    const rel = (RELATED_MARKETS[a.market] || {})[b.market];
+    return rel != null ? rel : SAME_PLAYER_DEFAULT_RHO;
+  }
+  if((a.leg_type === 'team_h2h' && bPlayer) || (b.leg_type === 'team_h2h' && aPlayer)){
+    return H2H_PLAYER_RHO * 0.6;
+  }
+  if(a.leg_type === 'team_h2h' && b.leg_type === 'team_h2h' &&
+     (a.team || '').toLowerCase() !== (b.team || '').toLowerCase()) return -1.0;
+  return NEUTRAL_RHO;
+}
+
+function avgPairCorrelation(legs){
+  if(legs.length < 2) return 0;
+  let s = 0, n = 0;
+  for(let i = 0; i < legs.length; i++)
+    for(let j = i+1; j < legs.length; j++){ s += pairCorrelation(legs[i], legs[j]); n++; }
+  return n ? s / n : 0;
+}
+
+function collapseRedundant(legs){
+  // Keep highest threshold per (player, market) ladder
+  const byLadder = new Map();
+  const other = [];
+  for(const leg of legs){
+    if(leg.leg_type === 'player_threshold' && leg.player && leg.market && leg.threshold != null){
+      const key = `${leg.player.toLowerCase()}|${leg.market}`;
+      if(!byLadder.has(key)) byLadder.set(key, []);
+      byLadder.get(key).push(leg);
+    } else { other.push(leg); }
+  }
+  const out = [...other];
+  for(const arr of byLadder.values()){
+    arr.sort((a,b) => (b.threshold || 0) - (a.threshold || 0));
+    out.push(arr[0]);
+  }
+  return out;
+}
+
+/* ---- combiner: Frechet linear interpolation ---- */
+function frechetCombine(pa, pb, rho){
+  pa = clip(pa, 0, 1); pb = clip(pb, 0, 1); rho = clip(rho, -1, 1);
+  if(rho <= -0.999) return 0;
+  const indep = pa * pb;
+  if(rho >= 0){
+    const upper = Math.min(pa, pb);
+    return (1 - rho) * indep + rho * upper;
+  }
+  const lower = Math.max(0, pa + pb - 1);
+  return (1 + rho) * indep + (-rho) * lower;
+}
+
+function greedyCombineProbs(legs){
+  if(!legs.length) return 1;
+  if(legs.length === 1) return legs[0].model_prob;
+  const remaining = [...legs].sort((a,b) => b.model_prob - a.model_prob);
+  const combo = [remaining.shift()];
+  let p = combo[0].model_prob;
+  while(remaining.length){
+    let bestIdx = 0, bestRho = -2;
+    for(let i = 0; i < remaining.length; i++){
+      let rho = -2;
+      for(const c of combo){ rho = Math.max(rho, pairCorrelation(remaining[i], c)); }
+      if(rho > bestRho){ bestRho = rho; bestIdx = i; }
+    }
+    const next = remaining.splice(bestIdx, 1)[0];
+    p = frechetCombine(p, next.model_prob, bestRho);
+    combo.push(next);
+  }
+  return clip(p, 0, 1);
+}
+
+function estimateBookPrice(legs){
+  const collapsed = collapseRedundant(legs);
+  if(!collapsed.length) return 0;
+  if(collapsed.length === 1) return collapsed[0].price;
+  const sorted = [...collapsed].sort((a,b) => b.price - a.price);
+  let chainedProb = sorted[0].model_prob;
+  let chainedPrice = sorted[0].price;
+  const used = [sorted[0]];
+  for(let i = 1; i < sorted.length; i++){
+    const leg = sorted[i];
+    let rho = 0;
+    for(const u of used){ rho = Math.max(rho, pairCorrelation(leg, u)); }
+    const pNew = leg.model_prob;
+    const joint = frechetCombine(chainedProb, pNew, rho);
+    let marginal = chainedProb > 0 ? Math.max(pNew, joint / chainedProb) : pNew;
+    marginal = clip(marginal, 0.01, 0.999);
+    chainedPrice *= 1.0 / marginal;
+    chainedProb = joint;
+    used.push(leg);
+  }
+  const margin = Math.min(0.12, 0.015 * collapsed.length);
+  return chainedPrice * (1 - margin);
+}
+
+function combineLegs(legs, mode='banker'){
+  const out = {
+    legs: [...legs], n_legs: legs.length, mode,
+    naive_price: 0, estimated_book_price: 0, combined_prob: 0,
+    fair_price: 0, combined_ev_pct: 0, expected_value: 0, warnings: [],
+  };
+  if(!legs.length) return out;
+  out.naive_price = legs.reduce((acc,l)=> acc * l.price, 1.0);
+  const p = greedyCombineProbs(legs);
+  out.combined_prob = Math.round(p * 10000) / 10000;
+  out.fair_price = p > 0 ? Math.round((1/p) * 100) / 100 : 0;
+  const book = estimateBookPrice(legs);
+  out.estimated_book_price = Math.round(book * 100) / 100;
+  out.combined_ev_pct = book > 0 ? Math.round((p * book - 1) * 10000) / 100 : 0;
+  out.expected_value = book > 0 ? Math.round((p * book - 1) * 10000) / 10000 : 0;
+
+  const avgRho = avgPairCorrelation(legs);
+  if(avgRho > 0.55) out.warnings.push(`high avg correlation (${avgRho.toFixed(2)}) -- legs share signal`);
+  if(avgRho < -0.10) out.warnings.push(`negative avg correlation (${avgRho.toFixed(2)}) -- conflicting legs`);
+
+  const seen = new Set();
+  for(const leg of legs){
+    if(leg.leg_type === 'player_threshold' && leg.player && leg.market){
+      const k = `${leg.player.toLowerCase()}|${leg.market}`;
+      if(seen.has(k)) out.warnings.push(`redundant ladder: multiple ${leg.player} ${leg.market} thresholds`);
+      seen.add(k);
+    }
+  }
+  if(legs.length > 15) out.warnings.push(`more than 15 legs (${legs.length}) -- consider trimming`);
+  return out;
+}
+
+/* ---- optimiser ---- */
+function bankerScore(ticket, minBookPrice){
+  const p = ticket.combined_prob;
+  if(p <= 0) return 0;
+  if(minBookPrice <= 0 || ticket.estimated_book_price >= minBookPrice) return p;
+  const ratio = Math.max(0, ticket.estimated_book_price / minBookPrice);
+  return p * Math.sqrt(ratio);
+}
+function valueScore(ticket){
+  if(ticket.combined_prob <= 0 || ticket.estimated_book_price <= 1.0) return 0;
+  const ev = ticket.combined_prob * ticket.estimated_book_price - 1.0;
+  return Math.max(0, ev);
+}
+
+function isCompatible(cand, selected){
+  for(const s of selected){ if(pairCorrelation(cand, s) <= -0.999) return false; }
+  return true;
+}
+function violatesLadder(cand, selected, allowRedundant){
+  if(allowRedundant) return false;
+  if(cand.leg_type !== 'player_threshold' || !cand.player || !cand.market) return false;
+  for(const s of selected){
+    if(s.leg_type === 'player_threshold' && s.player && s.market &&
+       s.player.toLowerCase() === cand.player.toLowerCase() &&
+       s.market === cand.market && s.threshold !== cand.threshold) return true;
+  }
+  return false;
+}
+
+function optimiseSGM(legs, opts){
+  const cfg = Object.assign({
+    mode: 'banker', target_legs: 15, min_book_price: 3.0,
+    min_per_leg_ev_pct: -10.0, allow_redundant_ladder: false,
+    initial_legs: [],
+  }, opts || {});
+  const pool = legs.filter(l => l.ev_pct >= cfg.min_per_leg_ev_pct && l.price > 1.0);
+  const selected = [...cfg.initial_legs];
+  const selIds = new Set(selected.map(l => l.leg_id));
+  const scoreFn = cfg.mode === 'banker'
+    ? t => bankerScore(t, cfg.min_book_price)
+    : t => valueScore(t);
+  while(selected.length < cfg.target_legs){
+    let best = null, bestScore = -1;
+    for(const cand of pool){
+      if(selIds.has(cand.leg_id)) continue;
+      if(!isCompatible(cand, selected)) continue;
+      if(violatesLadder(cand, selected, cfg.allow_redundant_ladder)) continue;
+      const ticket = combineLegs([...selected, cand]);
+      const s = scoreFn(ticket);
+      if(s > bestScore){ bestScore = s; best = cand; }
+    }
+    if(!best) break;
+    selected.push(best);
+    selIds.add(best.leg_id);
+  }
+  return combineLegs(selected, cfg.mode);
+}
+
+function ticketLadder(legs, mode, opts){
+  const counts = [3, 5, 8, 10, 12, 15];
+  return counts.map(n => optimiseSGM(legs, Object.assign({}, opts, {mode, target_legs: n})));
+}
+
+/* =============================================================================
+   UI STATE & RENDERING
+   ============================================================================= */
+let ALL_LEGS = [];           // parsed + scored
+let SELECTED = new Set();    // leg_id
+let MODE = 'banker';
+let SORT = {col: 'model_prob', dir: -1};
+
+function setMode(m){
+  MODE = m;
+  document.getElementById('modeBanker').classList.toggle('active', m === 'banker');
+  document.getElementById('modeValue').classList.toggle('active', m === 'value');
+  renderResult();
+}
+
+function getOpts(){
+  return {
+    target_legs: parseInt(document.getElementById('targetLegs').value) || 15,
+    min_book_price: parseFloat(document.getElementById('minBookPrice').value) || 3.0,
+    min_per_leg_ev_pct: parseFloat(document.getElementById('minLegEv').value) || -10.0,
+    allow_redundant_ladder: false,
+  };
+}
+function getVig(){ return (parseFloat(document.getElementById('vig').value) || 4.0) / 100.0; }
+
+function parseInput(){
+  const text = document.getElementById('paste').value;
+  if(!text.trim()){ document.getElementById('parseStatus').textContent = 'Paste some data first.'; return; }
+  ALL_LEGS = parsePaste(text);
+  scoreAllLegs(ALL_LEGS, DEFAULT_PRIOR_STRENGTH, getVig());
+  SELECTED = new Set();
+  const players = new Set(ALL_LEGS.map(l => l.player).filter(Boolean));
+  const teams = new Set(ALL_LEGS.map(l => l.team).filter(Boolean));
+  document.getElementById('parseStatus').innerHTML =
+    `<span class="badge b-good">Parsed ${ALL_LEGS.length} legs</span> ` +
+    `<span class="small">${players.size} players, ${teams.size} teams</span>`;
+  renderLegs();
+  renderResult();
+  renderLadder();
+}
+
+function clearAll(){
+  document.getElementById('paste').value = '';
+  document.getElementById('parseStatus').textContent = '';
+  ALL_LEGS = []; SELECTED = new Set();
+  renderLegs(); renderResult(); renderLadder();
+}
+
+function clearSelection(){ SELECTED = new Set(); renderLegs(); renderResult(); }
+
+function autoBuild(){
+  if(!ALL_LEGS.length){ alert('Parse a paste first.'); return; }
+  const ticket = optimiseSGM(ALL_LEGS, Object.assign(getOpts(), {mode: MODE}));
+  SELECTED = new Set(ticket.legs.map(l => l.leg_id));
+  renderLegs(); renderResult(); renderLadder();
+}
+
+function toggleLeg(id){
+  if(SELECTED.has(id)) SELECTED.delete(id);
+  else SELECTED.add(id);
+  renderLegs(); renderResult();
+}
+
+function setSort(col){
+  if(SORT.col === col) SORT.dir = -SORT.dir;
+  else { SORT = {col, dir: -1}; }
+  renderLegs();
+}
+
+function applyFilters(legs){
+  const txt = (document.getElementById('filterText').value || '').toLowerCase();
+  const mkt = document.getElementById('filterMarket').value;
+  return legs.filter(l => {
+    if(mkt && l.market !== mkt) return false;
+    if(txt){
+      const blob = `${l.player||''} ${l.team||''} ${l.description}`.toLowerCase();
+      if(!blob.includes(txt)) return false;
+    }
+    return true;
+  });
+}
+
+function fmtPct(x){ return (x*100).toFixed(1) + '%'; }
+function fmtEv(x){ return (x>=0?'+':'') + x.toFixed(1) + '%'; }
+function evClass(ev){ return ev > 5 ? 'b-good' : ev < -3 ? 'b-bad' : 'b-muted'; }
+function flagsHtml(flags){
+  if(!flags || !flags.length) return '';
+  return flags.map(f => `<span class="badge b-warn" style="margin-right:3px">${f}</span>`).join('');
+}
+
+function renderLegs(){
+  const tbl = document.getElementById('legsTable');
+  if(!ALL_LEGS.length){
+    tbl.innerHTML = '<tbody><tr><td style="text-align:center;padding:30px;color:var(--muted)">Paste a market dump to populate legs.</td></tr></tbody>';
+    document.getElementById('legsCount').textContent = '';
+    document.getElementById('selCount').textContent = '';
+    return;
+  }
+  let legs = applyFilters(ALL_LEGS);
+  // sort
+  const dir = SORT.dir, col = SORT.col;
+  legs = [...legs].sort((a, b) => {
+    const av = a[col], bv = b[col];
+    if(typeof av === 'string') return dir * av.localeCompare(bv || '');
+    return dir * ((av || 0) - (bv || 0));
+  });
+
+  const cols = [
+    {k:'pick', l:''},
+    {k:'description', l:'Leg'},
+    {k:'price', l:'Price'},
+    {k:'hit_str', l:'Hits'},
+    {k:'model_prob', l:'Model'},
+    {k:'_market_p', l:'Mkt'},
+    {k:'ev_pct', l:'EV'},
+    {k:'confidence', l:'Conf'},
+    {k:'flags_str', l:'Flags'},
+  ];
+  let html = '<thead><tr>';
+  for(const c of cols){
+    if(c.k === 'pick' || c.k === 'flags_str' || c.k === 'hit_str'){
+      html += `<th>${c.l}</th>`;
+    } else {
+      const cls = SORT.col === c.k ? (SORT.dir < 0 ? 'sorted' : 'sorted-asc') : '';
+      html += `<th class="${cls}" onclick="setSort('${c.k}')">${c.l}</th>`;
+    }
+  }
+  html += '</tr></thead><tbody>';
+
+  for(const l of legs){
+    const checked = SELECTED.has(l.leg_id) ? 'checked' : '';
+    const rowCls = SELECTED.has(l.leg_id) ? 'picked' : '';
+    const marketP = l.price > 0 ? (1.0 / l.price) : 0;
+    const evCls = evClass(l.ev_pct);
+    html += `<tr class="${rowCls}">
+      <td><input type="checkbox" ${checked} onchange="toggleLeg('${l.leg_id}')"/></td>
+      <td>${escapeHtml(l.description)}</td>
+      <td>$${l.price.toFixed(2)}</td>
+      <td>${l.n_games ? l.hits + '/' + l.n_games : '-'}</td>
+      <td><b>${fmtPct(l.model_prob)}</b><div class="barwrap"><span style="width:${(l.model_prob*100).toFixed(0)}%"></span></div></td>
+      <td>${fmtPct(marketP)}</td>
+      <td><span class="badge ${evCls}">${fmtEv(l.ev_pct)}</span></td>
+      <td>${l.confidence.toFixed(2)}</td>
+      <td>${flagsHtml(l.flags)}</td>
+    </tr>`;
+  }
+  html += '</tbody>';
+  tbl.innerHTML = html;
+  document.getElementById('legsCount').textContent = `(${legs.length} of ${ALL_LEGS.length})`;
+  document.getElementById('selCount').textContent = SELECTED.size ? `${SELECTED.size} selected` : '';
+}
+
+function renderResult(){
+  const selectedLegs = ALL_LEGS.filter(l => SELECTED.has(l.leg_id));
+  document.getElementById('mLegs').textContent = selectedLegs.length;
+  if(!selectedLegs.length){
+    document.getElementById('mProb').textContent = '-';
+    document.getElementById('mBook').textContent = '-';
+    document.getElementById('mFair').textContent = '-';
+    document.getElementById('mEv').textContent = '-';
+    document.getElementById('extraInfo').textContent = '';
+    document.getElementById('warningPanel').innerHTML = '';
+    document.getElementById('selectedTable').innerHTML = '';
+    return;
+  }
+  const ticket = combineLegs(selectedLegs, MODE);
+  document.getElementById('mProb').textContent = fmtPct(ticket.combined_prob);
+  document.getElementById('mBook').textContent = '$' + ticket.estimated_book_price.toFixed(2);
+  document.getElementById('mFair').textContent = '$' + ticket.fair_price.toFixed(2);
+  document.getElementById('mEv').textContent = fmtEv(ticket.combined_ev_pct);
+  const avgRho = avgPairCorrelation(selectedLegs);
+  document.getElementById('extraInfo').innerHTML =
+    `Avg pairwise correlation: <b>${(avgRho>=0?'+':'') + avgRho.toFixed(2)}</b> ` +
+    `(higher = legs share signal -- safer but smaller payout). ` +
+    `Naive product price: $${ticket.naive_price.toFixed(2)} (book won't offer this).`;
+  let warns = '';
+  for(const w of ticket.warnings){
+    const cls = w.startsWith('redundant') || w.startsWith('high') ? '' : 'warn';
+    warns += `<div class="alert ${cls}">${escapeHtml(w)}</div>`;
+  }
+  document.getElementById('warningPanel').innerHTML = warns;
+
+  let html = '<thead><tr><th>Leg</th><th>Price</th><th>Hits</th><th>Model %</th><th>EV %</th></tr></thead><tbody>';
+  for(const l of ticket.legs){
+    html += `<tr>
+      <td>${escapeHtml(l.description)}</td>
+      <td>$${l.price.toFixed(2)}</td>
+      <td>${l.n_games ? l.hits + '/' + l.n_games : '-'}</td>
+      <td>${fmtPct(l.model_prob)}</td>
+      <td><span class="badge ${evClass(l.ev_pct)}">${fmtEv(l.ev_pct)}</span></td>
+    </tr>`;
+  }
+  html += '</tbody>';
+  document.getElementById('selectedTable').innerHTML = html;
+}
+
+function renderLadder(){
+  const body = document.getElementById('ladderBody');
+  if(!ALL_LEGS.length){ body.innerHTML = '<div class="small" style="padding:10px;color:var(--muted)">Parse a paste first.</div>'; return; }
+  const opts = getOpts();
+  const tickets = ticketLadder(ALL_LEGS, MODE, opts);
+  let html = '';
+  for(const t of tickets){
+    html += `<div class="ladder-row" onclick="loadLadderTicket(${t.n_legs})" style="cursor:pointer">
+      <div class="legs">${t.n_legs}</div>
+      <div class="small">${t.legs.slice(0,5).map(l => `<span class="legchip">${escapeHtml((l.player||l.team||'').split(' ')[0])} ${l.threshold||''}+</span>`).join(' ')}${t.legs.length>5?`<span class="small">+${t.legs.length-5} more</span>`:''}</div>
+      <div class="pct">${fmtPct(t.combined_prob)}</div>
+      <div>$${t.estimated_book_price.toFixed(2)}</div>
+      <div>$${t.fair_price.toFixed(2)}</div>
+      <div><span class="badge ${t.combined_ev_pct>5?'b-good':t.combined_ev_pct<-3?'b-bad':'b-muted'}">${fmtEv(t.combined_ev_pct)}</span></div>
+    </div>`;
+  }
+  body.innerHTML = html;
+}
+
+function loadLadderTicket(n){
+  const ticket = optimiseSGM(ALL_LEGS, Object.assign(getOpts(), {mode: MODE, target_legs: n}));
+  SELECTED = new Set(ticket.legs.map(l => l.leg_id));
+  renderLegs(); renderResult();
+  // scroll the result into view
+  document.getElementById('selectedTable').scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+function escapeHtml(s){
+  return String(s||'').replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+
+// Initial paint
+renderLegs(); renderResult(); renderLadder();
+</script>
+</body>
+</html>
